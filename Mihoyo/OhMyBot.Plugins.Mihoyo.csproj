@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <IsOhMyBotPlugin>true</IsOhMyBotPlugin>
+        <PluginName>Mihoyo</PluginName>
+        <AssemblyName>OhMyBot.Plugins.Mihoyo</AssemblyName>
+        <RootNamespace>OhMyBot.Plugins.Mihoyo</RootNamespace>
+    </PropertyGroup>
+</Project>

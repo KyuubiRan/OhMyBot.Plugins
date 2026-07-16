@@ -1,0 +1,21 @@
+{
+  "Mihoyo": {
+    "SaltApp": "47f15f1b66bee46b816115d8e8e6ebb6",
+    "SaltWeb": "d9200c846b10886e8c874fc33c8f308b",
+    "SaltX6": "t0qEgfub6cvueAPgR5m9aQWWVciEer7v",
+    "VerifyKey": "bll8iq97cem8",
+    "Version": "2.109.0",
+    "ClientType": "2",
+    "ClientTypeWeb": "5",
+    "BbsSignGids": "2",
+    "BbsForumId": "26",
+    "Timeout": "00:00:30"
+  },
+  "ScheduledTasks": {
+    "MihoyoAutoSign": {
+      "Enabled": true,
+      "Cron": "10 0 * * *",
+      "Args": {}
+    }
+  }
+}

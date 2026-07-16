@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <IsOhMyBotPlugin>true</IsOhMyBotPlugin>
+        <PluginName>Skland</PluginName>
+        <AssemblyName>OhMyBot.Plugins.Skland</AssemblyName>
+        <RootNamespace>OhMyBot.Plugins.Skland</RootNamespace>
+    </PropertyGroup>
+</Project>

@@ -1,0 +1,39 @@
+<Project>
+  <PropertyGroup>
+    <BaseOutputPath>$(MSBuildThisFileDirectory)build/$(MSBuildProjectName)/bin/</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)build/$(MSBuildProjectName)/obj/</BaseIntermediateOutputPath>
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildProjectDirectory)/bin/**;$(MSBuildProjectDirectory)/obj/**</DefaultItemExcludes>
+    <TargetFramework Condition="'$(TargetFramework)' == ''">net10.0</TargetFramework>
+    <ImplicitUsings Condition="'$(ImplicitUsings)' == ''">enable</ImplicitUsings>
+    <Nullable Condition="'$(Nullable)' == ''">enable</Nullable>
+    <OhMyBotRepositoryRoot Condition="'$(OhMyBotRepositoryRoot)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../OhMyBot/'))</OhMyBotRepositoryRoot>
+    <PluginDeployRoot Condition="'$(PluginDeployRoot)' == ''">$(OhMyBotRepositoryRoot)build/OhMyBot.Core.Host/bin/$(Configuration)/$(TargetFramework)/Plugins/</PluginDeployRoot>
+    <PluginDeployDir Condition="'$(PluginName)' != ''">$(PluginDeployRoot)$(PluginName)/</PluginDeployDir>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsOhMyBotPlugin)' == 'true'">
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <GenerateDependencyFile>true</GenerateDependencyFile>
+    <DebugType Condition="'$(Configuration)' == 'Debug'">portable</DebugType>
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+    <NoWarn>$(NoWarn);CS0436</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsOhMyBotPlugin)' == 'true'">
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <ProjectReference Include="$(OhMyBotRepositoryRoot)OhMyBot.Contracts/OhMyBot.Contracts.csproj" Private="false" />
+    <ProjectReference Include="$(OhMyBotRepositoryRoot)OhMyBot.Core/OhMyBot.Core.csproj" Private="false" />
+    <ProjectReference Include="$(OhMyBotRepositoryRoot)OhMyBot.Plugin.Abstractions/OhMyBot.Plugin.Abstractions.csproj" Private="false" />
+    <ProjectReference Include="$(OhMyBotRepositoryRoot)OhMyBot.Plugin.Commanding/OhMyBot.Plugin.Commanding.csproj" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(IsOhMyBotPlugin)' == 'true'">
+    <Using Include="Microsoft.Extensions.Configuration" />
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+</Project>

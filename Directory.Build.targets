@@ -1,0 +1,54 @@
+<Project>
+  <Target Name="ValidatePluginBuild"
+          BeforeTargets="BuildPluginPackage"
+          Condition="'$(IsOhMyBotPlugin)' == 'true'">
+    <Error Condition="!Exists('$(OhMyBotRepositoryRoot)OhMyBot.Core/OhMyBot.Core.csproj')"
+           Text="OhMyBot source checkout was not found at '$(OhMyBotRepositoryRoot)'. Set OhMyBotRepositoryRoot when using a different workspace layout." />
+    <Error Condition="'$(PluginName)' == ''"
+           Text="Plugin projects must set PluginName." />
+    <Error Condition="'$(TargetName)' == 'Plugin'"
+           Text="Plugin projects must keep a unique internal assembly name; the package target renames the deployment copy to Plugin.dll." />
+    <Error Condition="!Exists('$(MSBuildProjectDirectory)/pluginsettings.template.json')"
+           Text="Plugin project must provide pluginsettings.template.json." />
+  </Target>
+
+  <Target Name="BuildPluginPackage"
+          AfterTargets="Build"
+          DependsOnTargets="ValidatePluginBuild"
+          Condition="'$(IsOhMyBotPlugin)' == 'true'">
+    <PropertyGroup>
+      <PluginPackageDir>$(TargetDir)plugin-package/</PluginPackageDir>
+    </PropertyGroup>
+    <RemoveDir Directories="$(PluginPackageDir)" />
+    <MakeDir Directories="$(PluginPackageDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(PluginPackageDir)Plugin.dll" />
+    <Copy SourceFiles="$(TargetDir)$(TargetName).pdb"
+          DestinationFiles="$(PluginPackageDir)Plugin.pdb"
+          Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
+    <Copy SourceFiles="@(PluginPrivateDependency)"
+          DestinationFolder="$(PluginPackageDir)"
+          SkipUnchangedFiles="true"
+          Condition="'@(PluginPrivateDependency)' != ''" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)/pluginsettings.template.json"
+          DestinationFiles="$(PluginPackageDir)pluginsettings.template.json"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="DeployPluginToLocalHost"
+          AfterTargets="BuildPluginPackage"
+          Condition="'$(IsOhMyBotPlugin)' == 'true'">
+    <PropertyGroup>
+      <PluginDeployDir Condition="'$(PluginDeployDir)' == ''">$(PluginDeployRoot)$(PluginName)/</PluginDeployDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <PluginPackageFile Include="$(PluginPackageDir)**/*" />
+    </ItemGroup>
+    <MakeDir Directories="$(PluginDeployDir)" />
+    <Copy SourceFiles="@(PluginPackageFile)"
+          DestinationFiles="@(PluginPackageFile->'$(PluginDeployDir)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)/pluginsettings.template.json"
+          DestinationFiles="$(PluginDeployDir)pluginsettings.json"
+          Condition="!Exists('$(PluginDeployDir)pluginsettings.json')" />
+  </Target>
+</Project>

@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsOhMyBotPlugin>true</IsOhMyBotPlugin>
+    <PluginName>TemplatePluginName</PluginName>
+    <AssemblyName>OhMyBot.Plugins.TemplatePluginName</AssemblyName>
+    <RootNamespace>OhMyBot.Plugins.TemplatePluginName</RootNamespace>
+  </PropertyGroup>
+</Project>

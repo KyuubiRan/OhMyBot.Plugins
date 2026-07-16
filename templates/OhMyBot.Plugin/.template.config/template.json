@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "KyuubiRan",
+  "classifications": [
+    "OhMyBot",
+    "Plugin"
+  ],
+  "identity": "OhMyBot.Plugin.Template",
+  "name": "OhMyBot runtime plugin",
+  "shortName": "ohmybot-plugin",
+  "sourceName": "TemplatePluginName",
+  "defaultName": "Sample",
+  "preferNameDirectory": true,
+  "symbols": {
+    "PluginId": {
+      "type": "parameter",
+      "datatype": "string",
+      "description": "Stable reverse-domain plugin id.",
+      "defaultValue": "com.ohmybot.sample",
+      "replaces": "__PLUGIN_ID__"
+    },
+    "DisplayName": {
+      "type": "parameter",
+      "datatype": "string",
+      "description": "Human-readable plugin name.",
+      "defaultValue": "Sample Plugin",
+      "replaces": "__DISPLAY_NAME__"
+    },
+    "SupportedPlatforms": {
+      "type": "parameter",
+      "datatype": "choice",
+      "description": "Platforms that may invoke this plugin.",
+      "defaultValue": "All",
+      "choices": [
+        {
+          "choice": "All",
+          "description": "Telegram and QQ"
+        },
+        {
+          "choice": "Telegram",
+          "description": "Telegram only"
+        },
+        {
+          "choice": "QQ",
+          "description": "QQ only"
+        }
+      ]
+    }
+  },
+  "primaryOutputs": [
+    {
+      "path": "OhMyBot.Plugins.TemplatePluginName.csproj"
+    }
+  ],
+  "postActions": [
+    {
+      "actionId": "D396686C-DE0E-4DE6-906D-291CD29FC5DE",
+      "description": "Add the generated plugin project to the solution in the current directory.",
+      "continueOnError": true,
+      "manualInstructions": [
+        {
+          "text": "Run: dotnet sln add <generated-project>"
+        }
+      ]
+    }
+  ]
+}

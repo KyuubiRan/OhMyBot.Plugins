@@ -1,0 +1,18 @@
+using System.Reflection;
+using OhMyBot.Plugin.Abstractions;
+using OhMyBot.Plugins.TemplatePluginName;
+
+namespace OhMyBot.Plugins.Tests;
+
+[TestClass]
+public sealed class TemplatePluginNamePluginTests
+{
+    [TestMethod]
+    public void MetadataIsDeclared()
+    {
+        var metadata = typeof(TemplatePluginNamePlugin).GetCustomAttribute<OhMyBotPluginAttribute>();
+        Assert.IsNotNull(metadata);
+        Assert.AreEqual("__PLUGIN_ID__", metadata.Id);
+        Assert.AreNotEqual(PluginSupportedPlatforms.None, metadata.SupportedPlatforms);
+    }
+}

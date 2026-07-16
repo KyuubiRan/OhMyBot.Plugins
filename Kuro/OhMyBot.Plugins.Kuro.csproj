@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <IsOhMyBotPlugin>true</IsOhMyBotPlugin>
+        <PluginName>Kuro</PluginName>
+        <AssemblyName>OhMyBot.Plugins.Kuro</AssemblyName>
+        <RootNamespace>OhMyBot.Plugins.Kuro</RootNamespace>
+    </PropertyGroup>
+</Project>

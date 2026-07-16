@@ -1,0 +1,11 @@
+/.idea/
+/.vs/
+/.vscode/
+/build/
+.DS_Store
+**/bin/
+**/obj/
+**/pluginsettings.json
+/*/Plugin.dll
+/*/Plugin.pdb
+*.slnx.DotSettings.user
