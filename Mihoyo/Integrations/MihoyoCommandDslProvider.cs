@@ -46,7 +46,7 @@ public sealed class MihoyoCommandDslProvider(IServiceScopeFactory scopeFactory) 
                             Node("signin", "执行米游社游戏签到", "/mihoyo game signin [accountId] [genshin|sr|zzz|honkai3|themis|honkai2|all]", GameSignAsync)
                         ]
                     },
-                    Node("autosign", "米游社自动签到管理", "/mihoyo autosign", AutoSignAsync),
+                    Node("autosign", "自动签到管理", "/mihoyo autosign", AutoSignAsync),
                     Node("delete", "删除米游社绑定", "/mihoyo delete", DeleteAsync)
                 ]
             }

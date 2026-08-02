@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using OhMyBot.Contracts.Grpc;
 using OhMyBot.Core.Commanding.Callbacks;
 using OhMyBot.Core.Commanding.Commands;
+using OhMyBot.Core.Commanding.Presentation;
 using OhMyBot.Core.Infrastructure.Data;
 using OhMyBot.Core.Infrastructure.Data.Entities;
 using OhMyBot.Core.Infrastructure.Identity;
@@ -139,6 +140,34 @@ public class V2MihoyoTests
         var service = CreateAccountService(dbContext, new StubHandler());
         await Assert.ThrowsExactlyAsync<InvalidOperationException>(
             () => service.BindAsync(1, "some=value; another=thing"));
+    }
+
+    [TestMethod]
+    public async Task MihoyoAutoSignPanelOmitsPageSuffixForSinglePage()
+    {
+        // 四个插件的面板要在「账号不多」这个常见情形下逐字一致：单页不带页码后缀、无翻页按钮。
+        await using var coreDbContext = CreateCoreDbContext();
+        var builder = new MihoyoResponseBuilder(
+            new CallbackActionStore(new FakeDistributedCache(), Options.Create(new CallbackActionOptions())),
+            new NotificationSubscriptionService(coreDbContext, TimeProvider.System),
+            TimeProvider.System);
+        var accounts = new[]
+        {
+            new MihoyoAccount { Id = 1, CoreUserId = 1, DisplayName = "Mi1", Region = MihoyoRegion.Cn, AutoSignEnabled = true },
+            new MihoyoAccount { Id = 2, CoreUserId = 1, DisplayName = "Mi2", Region = MihoyoRegion.Cn, AutoSignEnabled = false }
+        };
+
+        var response = await builder.BuildAutoSignPanelAsync(CreateContext(), accounts);
+
+        // 面板正文是 MarkdownV2 转义过的，还原成用户实际看到的样子再断言。
+        var plain = MarkdownV2.ToPlain(response.TgText());
+        Assert.Contains("[米游社-自动签到]", plain);
+        Assert.Contains("点击账号进入设置：", plain);
+        Assert.Contains("[开] #1 Mi1 [国服]", plain);
+        Assert.Contains("[关] #2 Mi2 [国服]", plain);
+        Assert.DoesNotContain("第 ", plain);
+        Assert.IsFalse(response.TgButtonTexts().Any(text => text is "上一页" or "下一页"));
+        Assert.IsTrue(response.TgButtonTexts().Any(text => text == "开启/关闭全部"));
     }
 
     [TestMethod]

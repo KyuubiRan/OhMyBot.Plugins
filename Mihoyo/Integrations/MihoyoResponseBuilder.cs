@@ -15,6 +15,25 @@ public sealed class MihoyoResponseBuilder(
     private const int AccountsPerPage = 8;
     private const int RolesPerPage = 6;
 
+    private const string PreviousPageText = "上一页";
+    private const string NextPageText = "下一页";
+    private const string ToggleAllText = "开启/关闭全部";
+    private const string NotifyHintLine = "如需管理签到结果的消息推送，请使用 `/notify`";
+
+    private static readonly (long Flag, string Label)[] BbsTaskLabels =
+    [
+        (MihoyoBbsTaskFlags.SignIn, "签到"),
+        (MihoyoBbsTaskFlags.ViewPosts, "浏览"),
+        (MihoyoBbsTaskFlags.LikePosts, "点赞"),
+        (MihoyoBbsTaskFlags.SharePosts, "分享")
+    ];
+
+    /// <summary>单页时不显示页码，好让四个插件的面板在常见情形下逐字一致。</summary>
+    private static string PageSuffix(int page, int totalPages)
+    {
+        return totalPages <= 1 ? string.Empty : $"（第 {page + 1}/{totalPages} 页）";
+    }
+
     public Task<CommandResponse> BuildAccountListAsync(
         CommandContext context,
         IReadOnlyList<MihoyoAccount> accounts,
@@ -35,7 +54,7 @@ public sealed class MihoyoResponseBuilder(
     {
         return CommandResponses.TelegramMarkdown(
             context.Identity,
-            RenderSignResult(string.Empty, result.Account, result.Lines, autoSign),
+            RenderSignResult("社区", result.Account, result.Lines, autoSign),
             replyToMessageId: context.Request.MessageId);
     }
 
@@ -54,21 +73,21 @@ public sealed class MihoyoResponseBuilder(
         string? editMessageId = null,
         CancellationToken cancellationToken = default)
     {
-        var response = CommandResponses.Text("请选择要执行社区任务的米游社账号（仅国服）：", context);
-        ApplyEdit(response, editMessageId);
+        var response = CommandResponses.Text("请选择要执行社区任务的米游社账号（仅国服）：", context)
+            .AsTelegramEditIfSpecified(editMessageId);
         var cnAccounts = accounts.Where(account => account.Region == MihoyoRegion.Cn).ToArray();
-        foreach (var account in cnAccounts)
-        {
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "mihoyo-bbs-sign-select", $"{account.DisplayName} #{account.Id}",
-                new MihoyoBbsSignCallbackData(account.Id, actions.ToArray()), cancellationToken)));
-        }
+        var panel = new PanelBuilder(callbackStore, context);
+        await panel.AddGridAsync(
+            response, cnAccounts, columns: 1, "mihoyo-bbs-sign-select",
+            account => $"{account.DisplayName} #{account.Id}",
+            account => new MihoyoBbsSignCallbackData(account.Id, actions.ToArray()),
+            cancellationToken);
 
         if (cnAccounts.Length > 1)
         {
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "mihoyo-bbs-sign-all", "全部签到",
-                new MihoyoBbsSignAllCallbackData(), cancellationToken)));
+            await panel.AddRowAsync(
+                response, "mihoyo-bbs-sign-all", "全部签到",
+                new MihoyoBbsSignAllCallbackData(), cancellationToken);
         }
 
         return response;
@@ -80,20 +99,20 @@ public sealed class MihoyoResponseBuilder(
         string? editMessageId = null,
         CancellationToken cancellationToken = default)
     {
-        var response = CommandResponses.Text("请选择要执行游戏签到的米游社账号：", context);
-        ApplyEdit(response, editMessageId);
-        foreach (var account in accounts)
-        {
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "mihoyo-game-sign-panel", $"{account.DisplayName} #{account.Id} [{RegionLabel(account.Region)}]",
-                new MihoyoGameSignPanelCallbackData(account.Id), cancellationToken)));
-        }
+        var response = CommandResponses.Text("请选择要执行游戏签到的米游社账号：", context)
+            .AsTelegramEditIfSpecified(editMessageId);
+        var panel = new PanelBuilder(callbackStore, context);
+        await panel.AddGridAsync(
+            response, accounts, columns: 1, "mihoyo-game-sign-panel",
+            account => $"{account.DisplayName} #{account.Id} [{RegionLabel(account.Region)}]",
+            account => new MihoyoGameSignPanelCallbackData(account.Id),
+            cancellationToken);
 
         if (accounts.Count > 1)
         {
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "mihoyo-game-sign-all", "全部签到",
-                new MihoyoGameSignAllCallbackData(), cancellationToken)));
+            await panel.AddRowAsync(
+                response, "mihoyo-game-sign-all", "全部签到",
+                new MihoyoGameSignAllCallbackData(), cancellationToken);
         }
 
         return response;
@@ -112,41 +131,34 @@ public sealed class MihoyoResponseBuilder(
         var available = AvailableGameKeys(account);
         if (available.Count == 0)
         {
-            var empty = CommandResponses.Text(
-                $"账号 #{account.Id} {account.DisplayName} 暂无游戏角色，请先使用 /mihoyo game init {account.Id} 同步", context);
-            ApplyEdit(empty, editMessageId);
-            return empty;
+            return CommandResponses.Text(
+                    $"账号 #{account.Id} {account.DisplayName} 暂无游戏角色，请先使用 /mihoyo game init {account.Id} 同步", context)
+                .AsTelegramEditIfSpecified(editMessageId);
         }
 
         var selectedSet = new HashSet<string>(selected, StringComparer.OrdinalIgnoreCase);
         var lines = new List<string>
         {
-            "[米游社游戏签到]",
+            "[米游社-手动游戏签到]",
             $"账号：#{account.Id} {account.DisplayName} [{RegionLabel(account.Region)}]",
             "勾选要签到的游戏（√=签到 ×=跳过），然后点击「签到」："
         };
         lines.AddRange(available.Select(key => FormatGameRolesLine(account, MihoyoGameCatalog.FindByKey(key)!)));
-        var response = CommandResponses.Text(string.Join('\n', lines), context);
-        ApplyEdit(response, editMessageId);
+        var response = CommandResponses.Text(string.Join('\n', lines), context)
+            .AsTelegramEditIfSpecified(editMessageId);
+        var panel = new PanelBuilder(callbackStore, context);
 
-        foreach (var key in available)
-        {
-            var game = MihoyoGameCatalog.FindByKey(key)!;
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "mihoyo-game-sign-panel", $"{(selectedSet.Contains(key) ? "[√]" : "[×]")} {game.Name}",
-                new MihoyoGameSignPanelCallbackData(account.Id, Toggle: key), cancellationToken)));
-        }
+        await panel.AddGridAsync(
+            response, available, columns: 1, "mihoyo-game-sign-panel",
+            key => $"{(selectedSet.Contains(key) ? "[√]" : "[×]")} {MihoyoGameCatalog.FindByKey(key)!.Name}",
+            key => new MihoyoGameSignPanelCallbackData(account.Id, Toggle: key),
+            cancellationToken);
 
-        response.AddButtonRow(new ResponseButtonRow
-        {
-            Buttons =
-            {
-                await ButtonAsync(context, "mihoyo-game-sign-run", "签到",
-                    new MihoyoGameSignPanelCallbackData(account.Id), cancellationToken),
-                await ButtonAsync(context, "mihoyo-game-sign-back", "返回",
-                    new MihoyoGameSignBackCallbackData(), cancellationToken)
-            }
-        });
+        response.AddButtonRow(PanelBuilder.Row(
+            await panel.ButtonAsync("mihoyo-game-sign-run", "签到",
+                new MihoyoGameSignPanelCallbackData(account.Id), cancellationToken),
+            await panel.ButtonAsync("mihoyo-game-sign-back", "返回",
+                new MihoyoGameSignBackCallbackData(), cancellationToken)));
         return response;
     }
 
@@ -169,8 +181,8 @@ public sealed class MihoyoResponseBuilder(
 
         blocks.Add(string.Empty);
         blocks.Add("时间：" + timeProvider.GetUtcNow().ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
-        var response = CommandResponses.Text(string.Join('\n', blocks), context);
-        ApplyEdit(response, editMessageId);
+        var response = CommandResponses.Text(string.Join('\n', blocks), context)
+            .AsTelegramEditIfSpecified(editMessageId);
         return response;
     }
 
@@ -223,12 +235,11 @@ public sealed class MihoyoResponseBuilder(
         CancellationToken cancellationToken = default)
     {
         var response = CommandResponses.Text("请选择要删除的米游社账号：", context);
-        foreach (var account in accounts)
-        {
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "mihoyo-delete-select", $"{account.DisplayName} #{account.Id} [{RegionLabel(account.Region)}]",
-                new MihoyoAccountCallbackData(account.Id), cancellationToken)));
-        }
+        await new PanelBuilder(callbackStore, context).AddGridAsync(
+            response, accounts, columns: 1, "mihoyo-delete-select",
+            account => $"{account.DisplayName} #{account.Id} [{RegionLabel(account.Region)}]",
+            account => new MihoyoAccountCallbackData(account.Id),
+            cancellationToken);
 
         return response;
     }
@@ -240,29 +251,32 @@ public sealed class MihoyoResponseBuilder(
         CancellationToken cancellationToken = default,
         int page = 0)
     {
-        page = NormalizePage(page, accounts.Count, AccountsPerPage);
-        var response = CommandResponses.Text(BuildAutoSignText(accounts, page), context);
-        ApplyEdit(response, editMessageId);
-
-        var row = new ResponseButtonRow();
-        foreach (var account in accounts.Skip(page * AccountsPerPage).Take(AccountsPerPage))
+        var totalPages = Pagination.TotalPages(accounts.Count, AccountsPerPage);
+        page = Pagination.NormalizePage(page, accounts.Count, AccountsPerPage);
+        var response = CommandResponses.Text(BuildAutoSignText(accounts, page, totalPages), context)
+            .AsTelegramEditIfSpecified(editMessageId);
+        if (accounts.Count == 0)
         {
-            row.Buttons.Add(await ButtonAsync(
-                context, "mihoyo-autosign-account-menu", $"{(account.AutoSignEnabled ? "[开]" : "[关]")} {account.DisplayName}",
-                new MihoyoAutoSignMenuCallbackData(account.Id, "account"), cancellationToken));
-            if (row.Buttons.Count == 2)
-            {
-                response.AddButtonRow(row);
-                row = new ResponseButtonRow();
-            }
+            return response;
         }
 
-        if (row.Buttons.Count > 0)
-        {
-            response.AddButtonRow(row);
-        }
-
-        await AddPageNavigationAsync(response, context, "mihoyo-autosign-root-menu", 0, "root", page, accounts.Count, AccountsPerPage, cancellationToken);
+        var panel = new PanelBuilder(callbackStore, context);
+        await panel.AddGridAsync(
+            response,
+            Pagination.Slice(accounts, page, AccountsPerPage),
+            columns: 2,
+            "mihoyo-autosign-account-menu",
+            // 区服标记只放正文，按钮里塞进去会让 Telegram 双列按钮过宽。
+            account => $"{(account.AutoSignEnabled ? "[开]" : "[关]")} {account.DisplayName} #{account.Id}",
+            account => new MihoyoAutoSignMenuCallbackData(account.Id, "account", page),
+            cancellationToken);
+        await panel.AddPagerAsync(
+            response, "mihoyo-autosign-root-menu", page, totalPages,
+            target => new MihoyoAutoSignMenuCallbackData(0, "root", target),
+            PreviousPageText, NextPageText, cancellationToken);
+        await panel.AddRowAsync(
+            response, "mihoyo-auto-sign-toggle", ToggleAllText,
+            new MihoyoAutoSignCallbackData(0, ToggleAll: true, Page: page), cancellationToken);
         return response;
     }
 
@@ -271,7 +285,8 @@ public sealed class MihoyoResponseBuilder(
         IReadOnlyList<MihoyoAccount> accounts,
         long accountId,
         string? editMessageId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int page = 0)
     {
         var account = accounts.FirstOrDefault(item => item.Id == accountId);
         if (account is null)
@@ -279,29 +294,31 @@ public sealed class MihoyoResponseBuilder(
             return CommandResponses.Error("MihoyoAccountMissing", "未找到指定米游社账号", context);
         }
 
-        var response = CommandResponses.Text(BuildAutoSignAccountDetailText(account), context);
-        ApplyEdit(response, editMessageId);
+        var response = CommandResponses.Text(BuildAutoSignAccountDetailText(account), context)
+            .AsTelegramEditIfSpecified(editMessageId);
+        var panel = new PanelBuilder(callbackStore, context);
 
-        response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-            context, "mihoyo-auto-sign-toggle", account.AutoSignEnabled ? "[开] 总开关" : "[关] 总开关",
-            new MihoyoAutoSignCallbackData(account.Id), cancellationToken)));
+        await panel.AddRowAsync(
+            response, "mihoyo-auto-sign-toggle",
+            account.AutoSignEnabled ? "[开] 总开关" : "[关] 总开关",
+            new MihoyoAutoSignCallbackData(account.Id, Page: page), cancellationToken);
 
         var menuRow = new ResponseButtonRow();
         if (account.Region == MihoyoRegion.Cn)
         {
-            menuRow.Buttons.Add(await ButtonAsync(
-                context, "mihoyo-autosign-bbs-menu", "社区任务",
-                new MihoyoAutoSignMenuCallbackData(account.Id, "bbs"), cancellationToken));
+            menuRow.Buttons.Add(await panel.ButtonAsync(
+                "mihoyo-autosign-bbs-menu", "社区任务",
+                new MihoyoAutoSignMenuCallbackData(account.Id, "bbs", page), cancellationToken));
         }
 
-        menuRow.Buttons.Add(await ButtonAsync(
-            context, "mihoyo-autosign-game-menu", "游戏角色",
+        menuRow.Buttons.Add(await panel.ButtonAsync(
+            "mihoyo-autosign-game-menu", "游戏角色",
             new MihoyoAutoSignMenuCallbackData(account.Id, "game"), cancellationToken));
         response.AddButtonRow(menuRow);
 
-        response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-            context, "mihoyo-autosign-root-menu", "返回账号列表",
-            new MihoyoAutoSignMenuCallbackData(0, "root"), cancellationToken)));
+        await panel.AddRowAsync(
+            response, "mihoyo-autosign-root-menu", "返回账号列表",
+            new MihoyoAutoSignMenuCallbackData(0, "root", page), cancellationToken);
         return response;
     }
 
@@ -310,7 +327,8 @@ public sealed class MihoyoResponseBuilder(
         IReadOnlyList<MihoyoAccount> accounts,
         long accountId,
         string? editMessageId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int page = 0)
     {
         var account = accounts.FirstOrDefault(item => item.Id == accountId);
         if (account is null)
@@ -318,31 +336,21 @@ public sealed class MihoyoResponseBuilder(
             return CommandResponses.Error("MihoyoAccountMissing", "未找到指定米游社账号", context);
         }
 
-        var response = CommandResponses.Text(BuildAutoSignBbsText(account), context);
-        ApplyEdit(response, editMessageId);
+        var response = CommandResponses.Text(BuildAutoSignBbsText(account), context)
+            .AsTelegramEditIfSpecified(editMessageId);
+        var panel = new PanelBuilder(callbackStore, context);
 
-        response.AddButtonRow(new ResponseButtonRow
-        {
-            Buttons =
-            {
-                await TaskButtonAsync(context, account, MihoyoBbsTaskFlags.SignIn, "签到", cancellationToken),
-                await TaskButtonAsync(context, account, MihoyoBbsTaskFlags.ViewPosts, "浏览", cancellationToken)
-            }
-        });
-        response.AddButtonRow(new ResponseButtonRow
-        {
-            Buttons =
-            {
-                await TaskButtonAsync(context, account, MihoyoBbsTaskFlags.LikePosts, "点赞", cancellationToken),
-                await TaskButtonAsync(context, account, MihoyoBbsTaskFlags.SharePosts, "分享", cancellationToken)
-            }
-        });
-        response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-            context, "mihoyo-bbs-task-toggle-all", "开启/关闭全部",
-            new MihoyoBbsTaskToggleAllCallbackData(account.Id), cancellationToken)));
-        response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-            context, "mihoyo-autosign-account-menu", "返回",
-            new MihoyoAutoSignMenuCallbackData(account.Id, "account"), cancellationToken)));
+        await panel.AddGridAsync(
+            response, BbsTaskLabels, columns: 2, "mihoyo-bbs-task-toggle",
+            item => $"{(((account.BbsTaskFlags & item.Flag) != 0) ? "[开]" : "[关]")} {item.Label}",
+            item => new MihoyoBbsTaskCallbackData(account.Id, item.Flag),
+            cancellationToken);
+        await panel.AddRowAsync(
+            response, "mihoyo-bbs-task-toggle-all", ToggleAllText,
+            new MihoyoBbsTaskToggleAllCallbackData(account.Id), cancellationToken);
+        await panel.AddRowAsync(
+            response, "mihoyo-autosign-account-menu", "返回",
+            new MihoyoAutoSignMenuCallbackData(account.Id, "account", page), cancellationToken);
         return response;
     }
 
@@ -361,24 +369,30 @@ public sealed class MihoyoResponseBuilder(
         }
 
         var orderedRoles = account.Roles.OrderBy(role => role.GameBiz).ThenBy(role => role.GameUid).ToArray();
-        page = NormalizePage(page, orderedRoles.Length, RolesPerPage);
-        var response = CommandResponses.Text(BuildAutoSignGameText(account, page), context);
-        ApplyEdit(response, editMessageId);
+        var totalPages = Pagination.TotalPages(orderedRoles.Length, RolesPerPage);
+        page = Pagination.NormalizePage(page, orderedRoles.Length, RolesPerPage);
+        var response = CommandResponses.Text(BuildAutoSignGameText(account, orderedRoles, page, totalPages), context)
+            .AsTelegramEditIfSpecified(editMessageId);
+        var panel = new PanelBuilder(callbackStore, context);
 
-        foreach (var role in orderedRoles.Skip(page * RolesPerPage).Take(RolesPerPage))
-        {
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "mihoyo-game-auto-sign-toggle", $"{(role.AutoSignEnabled ? "[开]" : "[关]")} {FormatRole(role)}",
-                new MihoyoGameAutoSignCallbackData(role.Id, account.Id, page), cancellationToken)));
-        }
-
-        await AddPageNavigationAsync(response, context, "mihoyo-autosign-game-menu", account.Id, "game", page, orderedRoles.Length, RolesPerPage, cancellationToken);
-        response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-            context, "mihoyo-game-auto-sign-toggle-all", "开启/关闭全部",
-            new MihoyoGameAutoSignToggleAllCallbackData(account.Id, page), cancellationToken)));
-        response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-            context, "mihoyo-autosign-account-menu", "返回",
-            new MihoyoAutoSignMenuCallbackData(account.Id, "account"), cancellationToken)));
+        await panel.AddGridAsync(
+            response,
+            Pagination.Slice(orderedRoles, page, RolesPerPage),
+            columns: 1,
+            "mihoyo-game-auto-sign-toggle",
+            role => $"{(role.AutoSignEnabled ? "[开]" : "[关]")} {FormatRole(role)}",
+            role => new MihoyoGameAutoSignCallbackData(role.Id, account.Id, page),
+            cancellationToken);
+        await panel.AddPagerAsync(
+            response, "mihoyo-autosign-game-menu", page, totalPages,
+            target => new MihoyoAutoSignMenuCallbackData(account.Id, "game", target),
+            PreviousPageText, NextPageText, cancellationToken);
+        await panel.AddRowAsync(
+            response, "mihoyo-game-auto-sign-toggle-all", ToggleAllText,
+            new MihoyoGameAutoSignToggleAllCallbackData(account.Id, page), cancellationToken);
+        await panel.AddRowAsync(
+            response, "mihoyo-autosign-account-menu", "返回",
+            new MihoyoAutoSignMenuCallbackData(account.Id, "account"), cancellationToken);
         return response;
     }
 
@@ -400,33 +414,20 @@ public sealed class MihoyoResponseBuilder(
             replyToMessageId: editMessageId is null ? context.Request.MessageId : null,
             editMessageId: editMessageId);
 
-        var row = new ResponseButtonRow();
-        foreach (var account in accounts)
-        {
-            row.Buttons.Add(await ButtonAsync(
-                context, "notify-account-toggle", $"{(enabled.Contains(account.Id) ? "[开]" : "[关]")} {account.DisplayName}",
-                new NotifyAccountCallbackData(NotificationTypes.MihoyoAutoSign, account.Id, ToggleAll: false), cancellationToken));
-            if (row.Buttons.Count == 2)
-            {
-                response.AddButtonRow(row);
-                row = new ResponseButtonRow();
-            }
-        }
+        var panel = new PanelBuilder(callbackStore, context);
+        await panel.AddGridAsync(
+            response,
+            accounts,
+            columns: 2,
+            "notify-account-toggle",
+            account => $"{(enabled.Contains(account.Id) ? "[开]" : "[关]")} {account.DisplayName}",
+            account => new NotifyAccountCallbackData(NotificationTypes.MihoyoAutoSign, account.Id, ToggleAll: false),
+            cancellationToken);
 
-        if (row.Buttons.Count > 0)
-        {
-            response.AddButtonRow(row);
-        }
-
-        response.AddButtonRow(new ResponseButtonRow
-        {
-            Buttons =
-            {
-                await ButtonAsync(context, "notify-account-toggle", "开启/关闭全部",
-                    new NotifyAccountCallbackData(NotificationTypes.MihoyoAutoSign, 0, ToggleAll: true), cancellationToken),
-                await ButtonAsync(context, "notify-back", "返回", new NotifyBackCallbackData(), cancellationToken)
-            }
-        });
+        response.AddButtonRow(PanelBuilder.Row(
+            await panel.ButtonAsync("notify-account-toggle", ToggleAllText,
+                new NotifyAccountCallbackData(NotificationTypes.MihoyoAutoSign, 0, ToggleAll: true), cancellationToken),
+            await panel.ButtonAsync("notify-back", "返回", new NotifyBackCallbackData(), cancellationToken)));
         return response;
     }
 
@@ -512,130 +513,64 @@ public sealed class MihoyoResponseBuilder(
         return $" / {role.Nickname} ({role.GameUid}){level}";
     }
 
-    private async Task<ResponseButton> TaskButtonAsync(
-        CommandContext context, MihoyoAccount account, long taskFlag, string text, CancellationToken cancellationToken)
-    {
-        return await ButtonAsync(
-            context, "mihoyo-bbs-task-toggle", $"{(((account.BbsTaskFlags & taskFlag) != 0) ? "[开]" : "[关]")} {text}",
-            new MihoyoBbsTaskCallbackData(account.Id, taskFlag), cancellationToken);
-    }
 
-    private async Task<ResponseButton> ButtonAsync(
-        CommandContext context, string actionType, string text, object data, CancellationToken cancellationToken)
-    {
-        return new ResponseButton
-        {
-            Text = text,
-            Payload = await callbackStore.PutAsync(
-                actionType,
-                context.Identity.CoreUserId,
-                context.Request.ChatId,
-                context.Request.UserId,
-                data,
-                cancellationToken: cancellationToken)
-        };
-    }
 
-    private async Task AddPageNavigationAsync(
-        CommandResponse response,
-        CommandContext context,
-        string actionType,
-        long accountId,
-        string level,
-        int page,
-        int totalCount,
-        int pageSize,
-        CancellationToken cancellationToken)
-    {
-        var totalPages = GetTotalPages(totalCount, pageSize);
-        if (totalPages <= 1)
-        {
-            return;
-        }
 
-        var row = new ResponseButtonRow();
-        if (page > 0)
-        {
-            row.Buttons.Add(await ButtonAsync(context, actionType, "上一页",
-                new MihoyoAutoSignMenuCallbackData(accountId, level, page - 1), cancellationToken));
-        }
 
-        if (page + 1 < totalPages)
-        {
-            row.Buttons.Add(await ButtonAsync(context, actionType, "下一页",
-                new MihoyoAutoSignMenuCallbackData(accountId, level, page + 1), cancellationToken));
-        }
 
-        if (row.Buttons.Count > 0)
-        {
-            response.AddButtonRow(row);
-        }
-    }
-
-    private static ResponseButtonRow SingleButtonRow(ResponseButton button)
-    {
-        return new ResponseButtonRow { Buttons = { button } };
-    }
-
-    private static void ApplyEdit(CommandResponse response, string? editMessageId)
-    {
-        if (!string.IsNullOrWhiteSpace(editMessageId))
-        {
-            response.AsTelegramEdit(editMessageId);
-        }
-    }
-
-    private static string BuildAutoSignText(IReadOnlyList<MihoyoAccount> accounts, int page)
+    private static string BuildAutoSignText(IReadOnlyList<MihoyoAccount> accounts, int page, int totalPages)
     {
         if (accounts.Count == 0)
         {
             return "尚未绑定米游社账号";
         }
 
-        var totalPages = GetTotalPages(accounts.Count, AccountsPerPage);
-        var lines = new List<string> { "[米游社自动签到管理]", $"请选择账号（第 {page + 1}/{totalPages} 页）：" };
-        foreach (var account in accounts.Skip(page * AccountsPerPage).Take(AccountsPerPage))
+        var lines = new List<string>
         {
-            lines.Add($"#{account.Id} {account.DisplayName} [{RegionLabel(account.Region)}]：{(account.AutoSignEnabled ? "开启" : "关闭")}");
-        }
-
-        lines.Add("如需管理签到结果的消息推送，请使用 `/notify`");
+            "[米游社-自动签到]",
+            "点击账号进入设置" + PageSuffix(page, totalPages) + "："
+        };
+        lines.AddRange(Pagination.Slice(accounts, page, AccountsPerPage)
+            .Select(account => $"{(account.AutoSignEnabled ? "[开]" : "[关]")} #{account.Id} {account.DisplayName} [{RegionLabel(account.Region)}]"));
+        lines.Add(NotifyHintLine);
         return string.Join('\n', lines);
     }
 
     private static string BuildAutoSignAccountDetailText(MihoyoAccount account)
     {
-        var lines = new List<string>
-        {
-            "[米游社自动签到管理]",
+        // 社区任务只有国服账号有，用 null 让这一行整体消失。
+        return TextLayout.JoinLines(
+            "[米游社-自动签到]",
             $"账号：#{account.Id} {account.DisplayName} [{RegionLabel(account.Region)}]",
-            $"总开关：{(account.AutoSignEnabled ? "开启" : "关闭")}"
-        };
-        if (account.Region == MihoyoRegion.Cn)
-        {
-            lines.Add($"社区任务：{FormatBbsTasks(account.BbsTaskFlags)}");
-        }
-
-        lines.Add("游戏角色：" + FormatGameRoles(account));
-        return string.Join('\n', lines);
+            $"总开关：{(account.AutoSignEnabled ? "开启" : "关闭")}",
+            account.Region == MihoyoRegion.Cn ? $"社区任务：{FormatBbsTasks(account.BbsTaskFlags)}" : null,
+            "游戏角色：" + FormatGameRoles(account));
     }
 
     private static string BuildAutoSignBbsText(MihoyoAccount account)
     {
         return string.Join('\n',
-            "[米游社自动签到 - 社区任务]",
-            $"账号：#{account.Id} {account.DisplayName}",
+            "[米游社-自动签到 - 社区任务]",
+            $"账号：#{account.Id} {account.DisplayName} [{RegionLabel(account.Region)}]",
+            "点击任务开关自动签到：",
             $"当前已启用：{FormatBbsTasks(account.BbsTaskFlags)}");
     }
 
-    private static string BuildAutoSignGameText(MihoyoAccount account, int page)
+    private static string BuildAutoSignGameText(
+        MihoyoAccount account,
+        IReadOnlyList<MihoyoGameRole> roles,
+        int page,
+        int totalPages)
     {
-        var totalPages = GetTotalPages(account.Roles.Count, RolesPerPage);
-        return string.Join('\n',
-            "[米游社自动签到 - 游戏角色]",
+        var lines = new List<string>
+        {
+            "[米游社-自动签到 - 游戏角色]",
             $"账号：#{account.Id} {account.DisplayName} [{RegionLabel(account.Region)}]",
-            $"第 {page + 1}/{totalPages} 页",
-            "当前已启用：" + FormatGameRoles(account, onlyEnabled: true));
+            "点击角色开关自动签到" + PageSuffix(page, totalPages) + "："
+        };
+        lines.AddRange(Pagination.Slice(roles, page, RolesPerPage)
+            .Select(role => $"{(role.AutoSignEnabled ? "[开]" : "[关]")} {FormatRole(role)}"));
+        return string.Join('\n', lines);
     }
 
     private static string FormatRole(MihoyoGameRole role)
@@ -655,21 +590,18 @@ public sealed class MihoyoResponseBuilder(
 
     private static string FormatGameRoles(MihoyoAccount account, bool onlyEnabled = false)
     {
-        var roles = account.Roles
-            .Where(role => !onlyEnabled || role.AutoSignEnabled)
-            .Select(FormatRole)
-            .ToArray();
-        return roles.Length == 0 ? "无" : string.Join("、", roles);
+        return TextLayout.JoinOrEmpty(
+            account.Roles.Where(role => !onlyEnabled || role.AutoSignEnabled).Select(FormatRole),
+            "、",
+            "无");
     }
 
     private static string FormatBbsTasks(long flags)
     {
-        var enabled = new List<string>();
-        if ((flags & MihoyoBbsTaskFlags.SignIn) != 0) enabled.Add("签到");
-        if ((flags & MihoyoBbsTaskFlags.ViewPosts) != 0) enabled.Add("浏览");
-        if ((flags & MihoyoBbsTaskFlags.LikePosts) != 0) enabled.Add("点赞");
-        if ((flags & MihoyoBbsTaskFlags.SharePosts) != 0) enabled.Add("分享");
-        return enabled.Count == 0 ? "无" : string.Join("、", enabled);
+        return TextLayout.JoinOrEmpty(
+            BbsTaskLabels.Where(item => (flags & item.Flag) != 0).Select(item => item.Label),
+            "、",
+            "无");
     }
 
     private static string RegionLabel(MihoyoRegion region)
@@ -677,14 +609,5 @@ public sealed class MihoyoResponseBuilder(
         return region == MihoyoRegion.Cn ? "国服" : "国际服";
     }
 
-    private static int NormalizePage(int page, int totalCount, int pageSize)
-    {
-        var totalPages = GetTotalPages(totalCount, pageSize);
-        return Math.Clamp(page, 0, totalPages - 1);
-    }
 
-    private static int GetTotalPages(int totalCount, int pageSize)
-    {
-        return Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
-    }
 }

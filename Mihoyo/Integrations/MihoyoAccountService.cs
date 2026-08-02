@@ -243,6 +243,30 @@ public sealed partial class MihoyoAccountService(
     }
 
     /// <summary>
+    /// 账号级整体翻转：任一账号处于关闭则全开，否则全关。
+    /// 与角色级的 toggle-all 语义保持一致，免得同一面板上两个「开启/关闭全部」表现不同。
+    /// </summary>
+    public async Task<List<MihoyoAccount>> ToggleAllAutoSignAsync(long coreUserId, CancellationToken cancellationToken = default)
+    {
+        var accounts = await ListByOwnerAsync(coreUserId, cancellationToken: cancellationToken);
+        if (accounts.Count == 0)
+        {
+            return accounts;
+        }
+
+        var enabled = accounts.Any(account => !account.AutoSignEnabled);
+        var now = timeProvider.GetUtcNow();
+        foreach (var account in accounts)
+        {
+            account.AutoSignEnabled = enabled;
+            account.UpdatedAt = now;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return accounts;
+    }
+
+    /// <summary>
     /// 原子翻转手动游戏签到的某个游戏勾选状态并持久化，返回最新勾选集合（按目录顺序）。
     /// 以账号为粒度串行化读改写，避免并发点击互相覆盖。
     /// </summary>

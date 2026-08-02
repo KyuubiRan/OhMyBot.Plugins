@@ -143,7 +143,7 @@ public sealed class MihoyoCallbackHandler(
             }
         }
 
-        return builder.BuildCombinedResult(context, "[米游社社区任务 - 全部账号]", results, editMessageId);
+        return builder.BuildCombinedResult(context, "[米游社-手动社区签到 - 全部账号]", results, editMessageId);
     }
 
     private async Task<CommandResponse> ExecuteGameSignSelectAsync(
@@ -299,7 +299,7 @@ public sealed class MihoyoCallbackHandler(
             }
         }
 
-        return builder.BuildCombinedResult(context, "[米游社游戏签到 - 全部账号]", results, editMessageId);
+        return builder.BuildCombinedResult(context, "[米游社-手动游戏签到 - 全部账号]", results, editMessageId);
     }
 
     private async Task<CommandResponse> ExecuteAutoSignRootMenuAsync(
@@ -409,6 +409,16 @@ public sealed class MihoyoCallbackHandler(
         await using var scope = scopeFactory.CreateAsyncScope();
         var accountService = scope.ServiceProvider.GetRequiredService<MihoyoAccountService>();
         var builder = scope.ServiceProvider.GetRequiredService<MihoyoResponseBuilder>();
+
+        // 主菜单的「开启/关闭全部」：翻转后回到主菜单本身，而不是某个账号详情。
+        if (data.ToggleAll)
+        {
+            var all = await accountService.ToggleAllAutoSignAsync(context.Identity.CoreUserId, cancellationToken);
+            return all.Count == 0
+                ? CallbackError(context, editMessageId, "未找到指定米游社账号。")
+                : await builder.BuildAutoSignPanelAsync(context, all, editMessageId, cancellationToken, data.Page);
+        }
+
         var accounts = await accountService.ToggleAutoSignAsync(context.Identity.CoreUserId, data.AccountId, cancellationToken);
         if (accounts.Count == 0)
         {
