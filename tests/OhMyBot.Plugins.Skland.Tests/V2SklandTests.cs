@@ -37,7 +37,7 @@ public class V2SklandTests
         Assert.Contains("[开] #1 Skland1", plain);
         Assert.Contains("[关] #2 Skland2", plain);
         Assert.DoesNotContain("第 ", plain);
-        Assert.IsFalse(response.TgButtonTexts().Any(text => text is "上一页" or "下一页"));
+        Assert.IsFalse(response.TgButtonTexts().Any(text => text is "<上一页" or "下一页>"));
     }
 
     [TestMethod]
@@ -49,7 +49,7 @@ public class V2SklandTests
         var response = await builder.BuildAutoSignPanelAsync(CreateContext(), accounts);
 
         Assert.Contains("第 1/2 页", MarkdownV2.ToPlain(response.TgText()));
-        Assert.IsTrue(response.TgButtonTexts().Any(text => text == "下一页"));
+        Assert.IsTrue(response.TgButtonTexts().Any(text => text == "下一页>"));
         // 第 9 个账号属于第二页，不该出现在首页的按钮里。
         Assert.IsFalse(response.TgButtonTexts().Any(text => text.Contains("Skland9", StringComparison.Ordinal)));
         // 账号按钮两列排布，与其余三个插件一致。
@@ -60,13 +60,18 @@ public class V2SklandTests
     public async Task SklandAutoSignPanelAlwaysOffersToggleAll()
     {
         // 之前四个插件里只有 AiRouter 有这个按钮，本次统一补齐。
+        // 它和翻页按钮合并成同一行，首末页不补占位——所以单页只剩它自己，首页是「它 + 下一页」。
         var builder = CreateBuilder();
 
         var single = await builder.BuildAutoSignPanelAsync(CreateContext(), CreateAccounts(1));
         var paged = await builder.BuildAutoSignPanelAsync(CreateContext(), CreateAccounts(9));
 
-        Assert.IsTrue(single.TgButtonTexts().Any(text => text == "开启/关闭全部"));
-        Assert.IsTrue(paged.TgButtonTexts().Any(text => text == "开启/关闭全部"));
+        CollectionAssert.AreEqual(
+            new[] { "开启/关闭全部" },
+            single.TgButtonRows()[^1].Buttons.Select(button => button.Text).ToArray());
+        CollectionAssert.AreEqual(
+            new[] { "开启/关闭全部", "下一页>" },
+            paged.TgButtonRows()[^1].Buttons.Select(button => button.Text).ToArray());
     }
 
     [TestMethod]
@@ -104,7 +109,7 @@ public class V2SklandTests
         Assert.Contains("总开关：开启", plain);
         Assert.Contains("第 1/2 页", plain);
         Assert.Contains("[关] 明日方舟/Dr1", plain);
-        Assert.IsTrue(response.TgButtonTexts().Any(text => text == "下一页"));
+        Assert.IsTrue(response.TgButtonTexts().Any(text => text == "下一页>"));
         Assert.IsTrue(response.TgButtonTexts().Any(text => text == "开启/关闭全部"));
         Assert.IsTrue(response.TgButtonTexts().Any(text => text == "返回账号列表"));
     }

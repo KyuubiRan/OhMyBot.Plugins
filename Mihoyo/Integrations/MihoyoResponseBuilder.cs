@@ -15,8 +15,8 @@ public sealed class MihoyoResponseBuilder(
     private const int AccountsPerPage = 8;
     private const int RolesPerPage = 6;
 
-    private const string PreviousPageText = "上一页";
-    private const string NextPageText = "下一页";
+    private const string PreviousPageText = "<上一页";
+    private const string NextPageText = "下一页>";
     private const string ToggleAllText = "开启/关闭全部";
     private const string NotifyHintLine = "如需管理签到结果的消息推送，请使用 `/notify`";
 
@@ -270,13 +270,13 @@ public sealed class MihoyoResponseBuilder(
             account => $"{(account.AutoSignEnabled ? "[开]" : "[关]")} {account.DisplayName} #{account.Id}",
             account => new MihoyoAutoSignMenuCallbackData(account.Id, "account", page),
             cancellationToken);
+        var toggleAll = await panel.ButtonAsync(
+            "mihoyo-auto-sign-toggle", ToggleAllText,
+            new MihoyoAutoSignCallbackData(0, ToggleAll: true, Page: page), cancellationToken);
         await panel.AddPagerAsync(
             response, "mihoyo-autosign-root-menu", page, totalPages,
             target => new MihoyoAutoSignMenuCallbackData(0, "root", target),
-            PreviousPageText, NextPageText, cancellationToken);
-        await panel.AddRowAsync(
-            response, "mihoyo-auto-sign-toggle", ToggleAllText,
-            new MihoyoAutoSignCallbackData(0, ToggleAll: true, Page: page), cancellationToken);
+            PreviousPageText, NextPageText, cancellationToken, middleButton: toggleAll);
         return response;
     }
 

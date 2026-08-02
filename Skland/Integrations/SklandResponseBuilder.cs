@@ -15,8 +15,8 @@ public sealed class SklandResponseBuilder(
     private const int AccountsPerPage = 8;
     private const int RolesPerPage = 6;
 
-    private const string PreviousPageText = "上一页";
-    private const string NextPageText = "下一页";
+    private const string PreviousPageText = "<上一页";
+    private const string NextPageText = "下一页>";
     private const string ToggleAllText = "开启/关闭全部";
     private const string NotifyHintLine = "如需管理签到结果的消息推送，请使用 `/notify`";
 
@@ -224,13 +224,13 @@ public sealed class SklandResponseBuilder(
             account => $"{(account.AutoSignEnabled ? "[开]" : "[关]")} {account.DisplayName} #{account.Id}",
             account => new SklandAutoSignMenuCallbackData(account.Id, "account", page),
             cancellationToken);
+        var toggleAll = await panel.ButtonAsync(
+            "skland-auto-sign-toggle", ToggleAllText,
+            new SklandAutoSignCallbackData(0, ToggleAll: true, Page: page), cancellationToken);
         await panel.AddPagerAsync(
             response, "skland-autosign-root-menu", page, totalPages,
             target => new SklandAutoSignMenuCallbackData(0, "root", target),
-            PreviousPageText, NextPageText, cancellationToken);
-        await panel.AddRowAsync(
-            response, "skland-auto-sign-toggle", ToggleAllText,
-            new SklandAutoSignCallbackData(0, ToggleAll: true, Page: page), cancellationToken);
+            PreviousPageText, NextPageText, cancellationToken, middleButton: toggleAll);
         return response;
     }
 

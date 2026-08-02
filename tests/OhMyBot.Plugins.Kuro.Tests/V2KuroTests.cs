@@ -161,7 +161,7 @@ public class V2KuroTests
         var response = await builder.BuildAutoSignPanelAsync(CreateContext(), accounts);
 
         Assert.Contains("第 1/2 页", response.TgText());
-        Assert.IsTrue(response.TgButtonTexts().Any(text => text == "下一页"));
+        Assert.IsTrue(response.TgButtonTexts().Any(text => text == "下一页>"));
         Assert.IsFalse(response.TgButtonTexts().Any(text => text.Contains("Kuro9", StringComparison.Ordinal)));
         Assert.IsTrue(response.TgButtonTexts().Any(text => text == "开启/关闭全部"));
     }
@@ -191,7 +191,7 @@ public class V2KuroTests
         Assert.Contains("[开] #1 Kuro1", plain);
         Assert.Contains("[关] #2 Kuro2", plain);
         Assert.DoesNotContain("第 ", plain);
-        Assert.IsFalse(response.TgButtonTexts().Any(text => text is "上一页" or "下一页"));
+        Assert.IsFalse(response.TgButtonTexts().Any(text => text is "<上一页" or "下一页>"));
         Assert.IsTrue(response.TgButtonTexts().Any(text => text == "开启/关闭全部"));
     }
 
@@ -227,7 +227,7 @@ public class V2KuroTests
         var buttons = response.TgButtonTexts().ToArray();
 
         Assert.Contains("第 1/2 页", response.TgText());
-        CollectionAssert.Contains(buttons, "下一页");
+        CollectionAssert.Contains(buttons, "下一页>");
         CollectionAssert.Contains(buttons, "开启/关闭全部");
         CollectionAssert.Contains(buttons, "返回");
     }

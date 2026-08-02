@@ -15,8 +15,8 @@ public sealed class KuroResponseBuilder(
     private const int AccountsPerPage = 8;
     private const int RolesPerPage = 6;
 
-    private const string PreviousPageText = "上一页";
-    private const string NextPageText = "下一页";
+    private const string PreviousPageText = "<上一页";
+    private const string NextPageText = "下一页>";
     private const string ToggleAllText = "开启/关闭全部";
     private const string NotifyHintLine = "如需管理签到结果的消息推送，请使用 `/notify`";
 
@@ -348,6 +348,11 @@ public sealed class KuroResponseBuilder(
             account => $"{(account.AutoSignEnabled ? "[开]" : "[关]")} {account.DisplayName} #{account.Id}",
             account => new KuroAutoSignMenuCallbackData(account.Id, "account", page),
             cancellationToken);
+        var toggleAll = await panel.ButtonAsync(
+            "kuro-auto-sign-toggle",
+            ToggleAllText,
+            new KuroAutoSignCallbackData(0, ToggleAll: true, Page: page),
+            cancellationToken);
         await panel.AddPagerAsync(
             response,
             "kuro-autosign-root-menu",
@@ -356,13 +361,8 @@ public sealed class KuroResponseBuilder(
             target => new KuroAutoSignMenuCallbackData(0, "root", target),
             PreviousPageText,
             NextPageText,
-            cancellationToken);
-        await panel.AddRowAsync(
-            response,
-            "kuro-auto-sign-toggle",
-            ToggleAllText,
-            new KuroAutoSignCallbackData(0, ToggleAll: true, Page: page),
-            cancellationToken);
+            cancellationToken,
+            middleButton: toggleAll);
         return response;
     }
 
