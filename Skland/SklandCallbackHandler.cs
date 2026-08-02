@@ -50,7 +50,7 @@ public sealed class SklandCallbackHandler(
             "skland-game-sign-run" => ExecuteGameSignRunAsync(pluginContext, action, editMessageId, cancellationToken),
             "skland-game-sign-back" => ExecuteGameSignBackAsync(pluginContext, editMessageId, cancellationToken),
             "skland-game-sign-all" => ExecuteGameSignAllAsync(pluginContext, editMessageId, cancellationToken),
-            "skland-autosign-root-menu" => ExecuteAutoSignRootMenuAsync(pluginContext, editMessageId, cancellationToken),
+            "skland-autosign-root-menu" => ExecuteAutoSignRootMenuAsync(pluginContext, action, editMessageId, cancellationToken),
             "skland-autosign-account-menu" => ExecuteAutoSignAccountMenuAsync(pluginContext, action, editMessageId, cancellationToken),
             "skland-auto-sign-toggle" => ExecuteAutoSignToggleAsync(pluginContext, action, editMessageId, cancellationToken),
             "skland-game-auto-sign-toggle" => ExecuteGameAutoSignToggleAsync(pluginContext, action, editMessageId, cancellationToken),
@@ -207,6 +207,7 @@ public sealed class SklandCallbackHandler(
 
     private async Task<CommandResponse> ExecuteAutoSignRootMenuAsync(
         CommandContext context,
+        CallbackAction action,
         string editMessageId,
         CancellationToken cancellationToken)
     {
@@ -217,7 +218,10 @@ public sealed class SklandCallbackHandler(
             context.Identity.CoreUserId,
             noTracking: true,
             cancellationToken);
-        return await builder.BuildAutoSignPanelAsync(context, accounts, editMessageId, cancellationToken);
+        // 旧按钮的 payload 里没有 Page，读不出来时回落到第 0 页而不是报错，
+        // 免得重启后 TTL 内的存量按钮集体失效。
+        var page = CallbackActionStore.ReadData<SklandAutoSignMenuCallbackData>(action)?.Page ?? 0;
+        return await builder.BuildAutoSignPanelAsync(context, accounts, editMessageId, cancellationToken, page);
     }
 
     private async Task<CommandResponse> ExecuteAutoSignAccountMenuAsync(
@@ -244,7 +248,8 @@ public sealed class SklandCallbackHandler(
             accounts,
             data.AccountId,
             editMessageId,
-            cancellationToken);
+            cancellationToken,
+            data.Page);
     }
 
     private async Task<CommandResponse> ExecuteAutoSignToggleAsync(
@@ -262,6 +267,16 @@ public sealed class SklandCallbackHandler(
         await using var scope = scopeFactory.CreateAsyncScope();
         var accountService = scope.ServiceProvider.GetRequiredService<SklandAccountService>();
         var builder = scope.ServiceProvider.GetRequiredService<SklandResponseBuilder>();
+
+        // 主菜单的「开启/关闭全部」：翻转后回到主菜单本身，而不是某个账号详情。
+        if (data.ToggleAll)
+        {
+            var all = await accountService.ToggleAllAutoSignAsync(context.Identity.CoreUserId, cancellationToken);
+            return all.Count == 0
+                ? CallbackError(context.Identity, editMessageId, "未找到指定森空岛账号。")
+                : await builder.BuildAutoSignPanelAsync(context, all, editMessageId, cancellationToken, data.Page);
+        }
+
         var accounts = await accountService.ToggleAutoSignAsync(
             context.Identity.CoreUserId,
             data.AccountId,
@@ -276,7 +291,8 @@ public sealed class SklandCallbackHandler(
             accounts,
             data.AccountId,
             editMessageId,
-            cancellationToken);
+            cancellationToken,
+            data.Page);
     }
 
     private async Task<CommandResponse> ExecuteGameAutoSignToggleAsync(

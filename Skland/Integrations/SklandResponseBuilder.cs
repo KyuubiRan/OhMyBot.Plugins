@@ -12,6 +12,20 @@ public sealed class SklandResponseBuilder(
     INotificationSubscriptionService subscriptionService,
     TimeProvider timeProvider)
 {
+    private const int AccountsPerPage = 8;
+    private const int RolesPerPage = 6;
+
+    private const string PreviousPageText = "上一页";
+    private const string NextPageText = "下一页";
+    private const string ToggleAllText = "开启/关闭全部";
+    private const string NotifyHintLine = "如需管理签到结果的消息推送，请使用 `/notify`";
+
+    /// <summary>单页时不显示页码，好让四个插件的面板在常见情形下逐字一致。</summary>
+    private static string PageSuffix(int page, int totalPages)
+    {
+        return totalPages <= 1 ? string.Empty : $"（第 {page + 1}/{totalPages} 页）";
+    }
+
     // ---- Account list / bind ----
 
     public async Task<CommandResponse> BuildAccountListAsync(
@@ -49,7 +63,7 @@ public sealed class SklandResponseBuilder(
         IReadOnlyList<(SklandAccount Account, IReadOnlyList<string> Lines)> results,
         string? editMessageId = null)
     {
-        var blocks = new List<string> { MarkdownV2.Escape("[森空岛游戏签到 - 全部账号]") };
+        var blocks = new List<string> { MarkdownV2.Escape("[森空岛-手动签到 - 全部账号]") };
         foreach (var (account, lines) in results)
         {
             blocks.Add($"账号：`#{account.Id}` `{MarkdownV2.Code(account.DisplayName)}`");
@@ -60,8 +74,7 @@ public sealed class SklandResponseBuilder(
         blocks.Add($"时间：{MarkdownV2.Escape(occurredAt.ToString("yyyy-MM-dd HH:mm:ss"))}");
         var response = CommandResponses.TelegramMarkdown(
             context.Identity, string.Join('\n', blocks), replyToMessageId: context.Request.MessageId);
-        ApplyEdit(response, editMessageId);
-        return response;
+        return response.AsTelegramEditIfSpecified(editMessageId);
     }
 
     // ---- Game sign selection (multi-account) ----
@@ -72,19 +85,19 @@ public sealed class SklandResponseBuilder(
         string? editMessageId = null,
         CancellationToken cancellationToken = default)
     {
-        var response = CommandResponses.Text("请选择要执行游戏签到的森空岛账号：", context);
-        ApplyEdit(response, editMessageId);
-        foreach (var account in accounts)
-        {
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "skland-game-sign-panel", $"{account.DisplayName} #{account.Id}",
-                new SklandGameSignPanelCallbackData(account.Id), cancellationToken)));
-        }
+        var response = CommandResponses.Text("请选择要执行游戏签到的森空岛账号：", context)
+            .AsTelegramEditIfSpecified(editMessageId);
+        var panel = new PanelBuilder(callbackStore, context);
+        await panel.AddGridAsync(
+            response, accounts, columns: 1, "skland-game-sign-panel",
+            account => $"{account.DisplayName} #{account.Id}",
+            account => new SklandGameSignPanelCallbackData(account.Id),
+            cancellationToken);
 
         if (accounts.Count > 1)
         {
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "skland-game-sign-all", "全部签到", new SklandGameSignAllCallbackData(), cancellationToken)));
+            await panel.AddRowAsync(
+                response, "skland-game-sign-all", "全部签到", new SklandGameSignAllCallbackData(), cancellationToken);
         }
 
         return response;
@@ -102,41 +115,34 @@ public sealed class SklandResponseBuilder(
         var available = AvailableGameKeys(account);
         if (available.Count == 0)
         {
-            var empty = CommandResponses.Text(
-                $"账号 #{account.Id} {account.DisplayName} 暂无角色，请先使用 /skland game init {account.Id} 同步", context);
-            ApplyEdit(empty, editMessageId);
-            return empty;
+            return CommandResponses.Text(
+                    $"账号 #{account.Id} {account.DisplayName} 暂无角色，请先使用 /skland game init {account.Id} 同步", context)
+                .AsTelegramEditIfSpecified(editMessageId);
         }
 
         var selectedSet = new HashSet<string>(selected, StringComparer.OrdinalIgnoreCase);
         var lines = new List<string>
         {
-            "[森空岛游戏签到]",
+            "[森空岛-手动签到]",
             $"账号：#{account.Id} {account.DisplayName}",
             "勾选要签到的游戏（√=签到 ×=跳过），然后点击「签到」："
         };
         lines.AddRange(available.Select(key => FormatGameLine(account, key)));
-        var response = CommandResponses.Text(string.Join('\n', lines), context);
-        ApplyEdit(response, editMessageId);
+        var response = CommandResponses.Text(string.Join('\n', lines), context)
+            .AsTelegramEditIfSpecified(editMessageId);
+        var panel = new PanelBuilder(callbackStore, context);
 
-        foreach (var key in available)
-        {
-            var gameId = SklandGameNames.FromAppCode(key);
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "skland-game-sign-panel", $"{(selectedSet.Contains(key) ? "[√]" : "[×]")} {SklandGameNames.Format(gameId)}",
-                new SklandGameSignPanelCallbackData(account.Id, Toggle: key), cancellationToken)));
-        }
+        await panel.AddGridAsync(
+            response, available, columns: 1, "skland-game-sign-panel",
+            key => $"{(selectedSet.Contains(key) ? "[√]" : "[×]")} {SklandGameNames.Format(SklandGameNames.FromAppCode(key))}",
+            key => new SklandGameSignPanelCallbackData(account.Id, Toggle: key),
+            cancellationToken);
 
-        response.AddButtonRow(new ResponseButtonRow
-        {
-            Buttons =
-            {
-                await ButtonAsync(context, "skland-game-sign-run", "签到",
-                    new SklandGameSignPanelCallbackData(account.Id), cancellationToken),
-                await ButtonAsync(context, "skland-game-sign-back", "返回",
-                    new SklandGameSignBackCallbackData(), cancellationToken)
-            }
-        });
+        response.AddButtonRow(PanelBuilder.Row(
+            await panel.ButtonAsync("skland-game-sign-run", "签到",
+                new SklandGameSignPanelCallbackData(account.Id), cancellationToken),
+            await panel.ButtonAsync("skland-game-sign-back", "返回",
+                new SklandGameSignBackCallbackData(), cancellationToken)));
         return response;
     }
 
@@ -185,25 +191,46 @@ public sealed class SklandResponseBuilder(
         CommandContext context,
         IReadOnlyList<SklandAccount> accounts,
         string? editMessageId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int page = 0)
     {
-        var lines = new List<string> { "[森空岛自动签到]", "点击账号进入设置：" };
-        foreach (var account in accounts)
+        var totalPages = Pagination.TotalPages(accounts.Count, AccountsPerPage);
+        page = Pagination.NormalizePage(page, accounts.Count, AccountsPerPage);
+        if (accounts.Count == 0)
         {
-            lines.Add($"{(account.AutoSignEnabled ? "[开]" : "[关]")} #{account.Id} {account.DisplayName}");
+            // 与 Kuro / Mihoyo 一致：无账号时给未绑定提示，而不是渲染一个只有标题的空列表。
+            return CommandResponses.Text("尚未绑定森空岛账号", context)
+                .AsTelegramEditIfSpecified(editMessageId);
         }
 
-        lines.Add("如需管理签到结果的消息推送，请使用 `/notify`");
-        var response = CommandResponses.Text(string.Join('\n', lines), context);
-        ApplyEdit(response, editMessageId);
-
-        foreach (var account in accounts)
+        var lines = new List<string>
         {
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "skland-autosign-account-menu", $"{(account.AutoSignEnabled ? "[开]" : "[关]")} {account.DisplayName} #{account.Id}",
-                new SklandAutoSignMenuCallbackData(account.Id, "account"), cancellationToken)));
-        }
+            "[森空岛-自动签到]",
+            "点击账号进入设置" + PageSuffix(page, totalPages) + "："
+        };
+        lines.AddRange(Pagination.Slice(accounts, page, AccountsPerPage)
+            .Select(account => $"{(account.AutoSignEnabled ? "[开]" : "[关]")} #{account.Id} {account.DisplayName}"));
+        lines.Add(NotifyHintLine);
 
+        var response = CommandResponses.Text(string.Join('\n', lines), context)
+            .AsTelegramEditIfSpecified(editMessageId);
+
+        var panel = new PanelBuilder(callbackStore, context);
+        await panel.AddGridAsync(
+            response,
+            Pagination.Slice(accounts, page, AccountsPerPage),
+            columns: 2,
+            "skland-autosign-account-menu",
+            account => $"{(account.AutoSignEnabled ? "[开]" : "[关]")} {account.DisplayName} #{account.Id}",
+            account => new SklandAutoSignMenuCallbackData(account.Id, "account", page),
+            cancellationToken);
+        await panel.AddPagerAsync(
+            response, "skland-autosign-root-menu", page, totalPages,
+            target => new SklandAutoSignMenuCallbackData(0, "root", target),
+            PreviousPageText, NextPageText, cancellationToken);
+        await panel.AddRowAsync(
+            response, "skland-auto-sign-toggle", ToggleAllText,
+            new SklandAutoSignCallbackData(0, ToggleAll: true, Page: page), cancellationToken);
         return response;
     }
 
@@ -212,52 +239,60 @@ public sealed class SklandResponseBuilder(
         IReadOnlyList<SklandAccount> accounts,
         long accountId,
         string? editMessageId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int page = 0)
     {
         var account = accounts.FirstOrDefault(item => item.Id == accountId);
         if (account is null)
         {
-            var missing = CommandResponses.Error("SklandAccountMissing", "未找到指定森空岛账号", context);
-            ApplyEdit(missing, editMessageId);
-            return missing;
+            return CommandResponses.Error("SklandAccountMissing", "未找到指定森空岛账号", context)
+                .AsTelegramEditIfSpecified(editMessageId);
         }
 
+        var roles = account.Roles.OrderBy(role => role.GameId).ThenBy(role => role.Id).ToArray();
+        var totalPages = Pagination.TotalPages(roles.Length, RolesPerPage);
+        page = Pagination.NormalizePage(page, roles.Length, RolesPerPage);
         var lines = new List<string>
         {
-            "[森空岛自动签到]",
+            "[森空岛-自动签到]",
             $"账号：#{account.Id} {account.DisplayName}",
-            $"账号总开关：{(account.AutoSignEnabled ? "开启" : "关闭")}",
-            "角色（总开关开启时，仅签到下方开启的角色）："
+            $"总开关：{(account.AutoSignEnabled ? "开启" : "关闭")}",
+            "点击角色开关自动签到" + PageSuffix(page, totalPages) + "："
         };
-        foreach (var role in account.Roles)
+        lines.AddRange(Pagination.Slice(roles, page, RolesPerPage)
+            .Select(role => $"{(role.AutoSignEnabled ? "[开]" : "[关]")} {role.GameName}/{role.NickName}"));
+
+        var response = CommandResponses.Text(string.Join('\n', lines), context)
+            .AsTelegramEditIfSpecified(editMessageId);
+        var panel = new PanelBuilder(callbackStore, context);
+
+        await panel.AddRowAsync(
+            response, "skland-auto-sign-toggle",
+            account.AutoSignEnabled ? "[开] 总开关" : "[关] 总开关",
+            new SklandAutoSignCallbackData(account.Id, Page: page), cancellationToken);
+        await panel.AddGridAsync(
+            response,
+            Pagination.Slice(roles, page, RolesPerPage),
+            columns: 1,
+            "skland-game-auto-sign-toggle",
+            role => $"{(role.AutoSignEnabled ? "[开]" : "[关]")} {role.GameName}/{role.NickName}",
+            role => new SklandGameAutoSignCallbackData(role.Id, account.Id),
+            cancellationToken);
+        await panel.AddPagerAsync(
+            response, "skland-autosign-account-menu", page, totalPages,
+            target => new SklandAutoSignMenuCallbackData(account.Id, "account", target),
+            PreviousPageText, NextPageText, cancellationToken);
+
+        if (roles.Length > 0)
         {
-            lines.Add($"{(role.AutoSignEnabled ? "[开]" : "[关]")} {role.GameName} {role.NickName}");
+            await panel.AddRowAsync(
+                response, "skland-game-auto-sign-toggle-all", ToggleAllText,
+                new SklandGameAutoSignToggleAllCallbackData(account.Id), cancellationToken);
         }
 
-        var response = CommandResponses.Text(string.Join('\n', lines), context);
-        ApplyEdit(response, editMessageId);
-
-        response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-            context, "skland-auto-sign-toggle", account.AutoSignEnabled ? "[开] 账号总开关" : "[关] 账号总开关",
-            new SklandAutoSignCallbackData(account.Id), cancellationToken)));
-
-        foreach (var role in account.Roles)
-        {
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "skland-game-auto-sign-toggle", $"{(role.AutoSignEnabled ? "[开]" : "[关]")} {role.GameName} {role.NickName}",
-                new SklandGameAutoSignCallbackData(role.Id, account.Id), cancellationToken)));
-        }
-
-        if (account.Roles.Count > 0)
-        {
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "skland-game-auto-sign-toggle-all", "开启/关闭全部角色",
-                new SklandGameAutoSignToggleAllCallbackData(account.Id), cancellationToken)));
-        }
-
-        response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-            context, "skland-autosign-root-menu", "返回账号列表",
-            new SklandAutoSignMenuCallbackData(0, "root"), cancellationToken)));
+        await panel.AddRowAsync(
+            response, "skland-autosign-root-menu", "返回账号列表",
+            new SklandAutoSignMenuCallbackData(0, "root", page), cancellationToken);
         return response;
     }
 
@@ -281,33 +316,17 @@ public sealed class SklandResponseBuilder(
             replyToMessageId: editMessageId is null ? context.Request.MessageId : null,
             editMessageId: editMessageId);
 
-        var row = new ResponseButtonRow();
-        foreach (var account in accounts)
-        {
-            row.Buttons.Add(await ButtonAsync(
-                context, "notify-account-toggle", $"{(enabled.Contains(account.Id) ? "[开]" : "[关]")} {account.DisplayName}",
-                new NotifyAccountCallbackData(NotificationTypes.SklandAutoSign, account.Id, ToggleAll: false), cancellationToken));
-            if (row.Buttons.Count == 2)
-            {
-                response.AddButtonRow(row);
-                row = new ResponseButtonRow();
-            }
-        }
+        var panel = new PanelBuilder(callbackStore, context);
+        await panel.AddGridAsync(
+            response, accounts, columns: 2, "notify-account-toggle",
+            account => $"{(enabled.Contains(account.Id) ? "[开]" : "[关]")} {account.DisplayName}",
+            account => new NotifyAccountCallbackData(NotificationTypes.SklandAutoSign, account.Id, ToggleAll: false),
+            cancellationToken);
 
-        if (row.Buttons.Count > 0)
-        {
-            response.AddButtonRow(row);
-        }
-
-        response.AddButtonRow(new ResponseButtonRow
-        {
-            Buttons =
-            {
-                await ButtonAsync(context, "notify-account-toggle", "开启/关闭全部",
-                    new NotifyAccountCallbackData(NotificationTypes.SklandAutoSign, 0, ToggleAll: true), cancellationToken),
-                await ButtonAsync(context, "notify-back", "返回", new NotifyBackCallbackData(), cancellationToken)
-            }
-        });
+        response.AddButtonRow(PanelBuilder.Row(
+            await panel.ButtonAsync("notify-account-toggle", ToggleAllText,
+                new NotifyAccountCallbackData(NotificationTypes.SklandAutoSign, 0, ToggleAll: true), cancellationToken),
+            await panel.ButtonAsync("notify-back", "返回", new NotifyBackCallbackData(), cancellationToken)));
         return response;
     }
 
@@ -331,12 +350,11 @@ public sealed class SklandResponseBuilder(
         CancellationToken cancellationToken = default)
     {
         var response = CommandResponses.Text("请选择要删除的森空岛账号：", context);
-        foreach (var account in accounts)
-        {
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "skland-delete-select", $"{account.DisplayName} #{account.Id}",
-                new SklandAccountCallbackData(account.Id), cancellationToken)));
-        }
+        await new PanelBuilder(callbackStore, context).AddGridAsync(
+            response, accounts, columns: 1, "skland-delete-select",
+            account => $"{account.DisplayName} #{account.Id}",
+            account => new SklandAccountCallbackData(account.Id),
+            cancellationToken);
 
         return response;
     }
@@ -408,28 +426,6 @@ public sealed class SklandResponseBuilder(
 
     // ---- Button helpers ----
 
-    private async Task<ResponseButton> ButtonAsync(
-        CommandContext context, string actionType, string text, object data, CancellationToken cancellationToken)
-    {
-        return new ResponseButton
-        {
-            Text = text,
-            Payload = await callbackStore.PutAsync(
-                actionType, context.Identity.CoreUserId, context.Request.ChatId, context.Request.UserId,
-                data, cancellationToken: cancellationToken)
-        };
-    }
 
-    private static ResponseButtonRow SingleButtonRow(ResponseButton button)
-    {
-        return new ResponseButtonRow { Buttons = { button } };
-    }
 
-    private static void ApplyEdit(CommandResponse response, string? editMessageId)
-    {
-        if (!string.IsNullOrWhiteSpace(editMessageId))
-        {
-            response.AsTelegramEdit(editMessageId);
-        }
-    }
 }

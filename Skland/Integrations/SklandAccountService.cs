@@ -163,6 +163,30 @@ public sealed class SklandAccountService(
         return accounts;
     }
 
+    /// <summary>
+    /// 账号级整体翻转：任一账号处于关闭则全开，否则全关。
+    /// 与角色级的 toggle-all 语义保持一致，免得同一面板上两个「开启/关闭全部」表现不同。
+    /// </summary>
+    public async Task<List<SklandAccount>> ToggleAllAutoSignAsync(long coreUserId, CancellationToken cancellationToken = default)
+    {
+        var accounts = await ListByOwnerAsync(coreUserId, cancellationToken: cancellationToken);
+        if (accounts.Count == 0)
+        {
+            return accounts;
+        }
+
+        var enabled = accounts.Any(account => !account.AutoSignEnabled);
+        var now = timeProvider.GetUtcNow();
+        foreach (var account in accounts)
+        {
+            account.AutoSignEnabled = enabled;
+            account.UpdatedAt = now;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return accounts;
+    }
+
     public async Task<List<SklandAccount>> ToggleGameAutoSignAsync(long coreUserId, long roleId, CancellationToken cancellationToken = default)
     {
         var role = await dbContext.SklandGameRoles
