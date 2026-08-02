@@ -1,14 +1,14 @@
 <Solution>
   <Folder Name="/Kuro/">
     <Project Path="Kuro/OhMyBot.Plugins.Kuro.csproj" />
+    <Project Path="tests/OhMyBot.Plugins.Kuro.Tests/OhMyBot.Plugins.Kuro.Tests.csproj" />
   </Folder>
   <Folder Name="/Mihoyo/">
     <Project Path="Mihoyo/OhMyBot.Plugins.Mihoyo.csproj" />
+    <Project Path="tests/OhMyBot.Plugins.Mihoyo.Tests/OhMyBot.Plugins.Mihoyo.Tests.csproj" />
   </Folder>
   <Folder Name="/Skland/">
     <Project Path="Skland/OhMyBot.Plugins.Skland.csproj" />
-  </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/OhMyBot.Plugins.Tests/OhMyBot.Plugins.Tests.csproj" />
+    <Project Path="tests/OhMyBot.Plugins.Skland.Tests/OhMyBot.Plugins.Skland.Tests.csproj" />
   </Folder>
 </Solution>

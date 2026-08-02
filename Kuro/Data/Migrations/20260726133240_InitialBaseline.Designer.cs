@@ -12,7 +12,7 @@ using OhMyBot.Plugins.Kuro.Data;
 namespace OhMyBot.Plugins.Kuro.Data.Migrations
 {
     [DbContext(typeof(KuroDbContext))]
-    [Migration("20260712152724_InitialBaseline")]
+    [Migration("20260726133240_InitialBaseline")]
     partial class InitialBaseline
     {
         /// <inheritdoc />

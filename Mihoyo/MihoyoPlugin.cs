@@ -73,7 +73,7 @@ public sealed class MihoyoPlugin : CommandPlugin
 
         services.AddScoped<INotificationSubscriptionService, HostNotificationSubscriptionServiceBridge>();
         services.AddPluginEfBaseline<MihoyoDbContext>(new EfBaselineOptions(
-            "com.ohmybot.mihoyo", "__EFMigrationsHistory_Mihoyo", ["MihoyoAccounts", "MihoyoGameRoles"], "MihoyoAccounts"));
+            "com.ohmybot.mihoyo", "MihoyoAccounts"));
         services.AddScoped<MihoyoAccountService>();
         services.AddScoped<MihoyoSignService>();
         services.AddScoped<MihoyoResponseBuilder>();

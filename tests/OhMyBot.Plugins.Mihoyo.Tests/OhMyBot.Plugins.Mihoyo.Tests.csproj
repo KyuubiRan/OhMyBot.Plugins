@@ -7,9 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../Kuro/OhMyBot.Plugins.Kuro.csproj" />
     <ProjectReference Include="../../Mihoyo/OhMyBot.Plugins.Mihoyo.csproj" />
-    <ProjectReference Include="../../Skland/OhMyBot.Plugins.Skland.csproj" />
     <ProjectReference Include="$(OhMyBotRepositoryRoot)OhMyBot.Contracts/OhMyBot.Contracts.csproj" />
     <ProjectReference Include="$(OhMyBotRepositoryRoot)OhMyBot.Core/OhMyBot.Core.csproj" />
     <ProjectReference Include="$(OhMyBotRepositoryRoot)OhMyBot.Plugin.Abstractions/OhMyBot.Plugin.Abstractions.csproj" />

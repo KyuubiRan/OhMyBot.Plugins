@@ -13,7 +13,7 @@ using OhMyBot.Core.Commanding.Notifications;
 using OhMyBot.Core.Infrastructure.Security;
 using OhMyBot.Plugins.Kuro.Data;
 
-namespace OhMyBot.Tests;
+namespace OhMyBot.Plugins.Kuro.Tests;
 
 [TestClass]
 public class V2KuroTests

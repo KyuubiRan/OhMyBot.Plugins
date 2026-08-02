@@ -5,14 +5,14 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using OhMyBot.Plugins.Skland.Data;
+using OhMyBot.Plugins.Mihoyo.Data;
 
 #nullable disable
 
-namespace OhMyBot.Plugins.Skland.Data.Migrations
+namespace OhMyBot.Plugins.Mihoyo.Data.Migrations
 {
-    [DbContext(typeof(SklandDbContext))]
-    [Migration("20260712152731_InitialBaseline")]
+    [DbContext(typeof(MihoyoDbContext))]
+    [Migration("20260726133304_InitialBaseline")]
     partial class InitialBaseline
     {
         /// <inheritdoc />
@@ -25,7 +25,7 @@ namespace OhMyBot.Plugins.Skland.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("OhMyBot.Core.Infrastructure.Data.Entities.SklandAccount", b =>
+            modelBuilder.Entity("OhMyBot.Core.Infrastructure.Data.Entities.MihoyoAccount", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -36,21 +36,19 @@ namespace OhMyBot.Plugins.Skland.Data.Migrations
                     b.Property<bool>("AutoSignEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<long>("BbsTaskFlags")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("CookieCiphertext")
+                        .IsRequired()
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)");
+
                     b.Property<long>("CoreUserId")
                         .HasColumnType("bigint");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CredCiphertext")
-                        .IsRequired()
-                        .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)");
-
-                    b.Property<string>("DeviceId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("DisplayName")
                         .IsRequired()
@@ -63,20 +61,21 @@ namespace OhMyBot.Plugins.Skland.Data.Migrations
                         .HasColumnType("text")
                         .HasDefaultValue("");
 
-                    b.Property<string>("HgTokenCiphertext")
+                    b.Property<string>("Mid")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<int>("Region")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StokenCiphertext")
                         .IsRequired()
                         .HasMaxLength(2048)
                         .HasColumnType("character varying(2048)");
 
-                    b.Property<string>("SignTokenCiphertext")
-                        .IsRequired()
-                        .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)");
-
-                    b.Property<string>("SklandUserId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                    b.Property<long>("Stuid")
+                        .HasColumnType("bigint");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -85,13 +84,13 @@ namespace OhMyBot.Plugins.Skland.Data.Migrations
 
                     b.HasIndex("CoreUserId");
 
-                    b.HasIndex("SklandUserId")
+                    b.HasIndex("Region", "Stuid")
                         .IsUnique();
 
-                    b.ToTable("SklandAccounts", (string)null);
+                    b.ToTable("MihoyoAccounts", (string)null);
                 });
 
-            modelBuilder.Entity("OhMyBot.Core.Infrastructure.Data.Entities.SklandGameRole", b =>
+            modelBuilder.Entity("OhMyBot.Core.Infrastructure.Data.Entities.MihoyoGameRole", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -99,54 +98,39 @@ namespace OhMyBot.Plugins.Skland.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
-                    b.Property<string>("AppCode")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
                     b.Property<bool>("AutoSignEnabled")
                         .HasColumnType("boolean");
-
-                    b.Property<string>("ChannelName")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("GameId")
-                        .HasColumnType("integer");
+                    b.Property<string>("GameBiz")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("GameName")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
+                    b.Property<long>("GameUid")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("Level")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
-                    b.Property<string>("NickName")
+                    b.Property<long>("MihoyoAccountId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Nickname")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
-                    b.Property<string>("RoleId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("ServerId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<long>("SklandAccountId")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("Uid")
+                    b.Property<string>("Region")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
@@ -156,13 +140,13 @@ namespace OhMyBot.Plugins.Skland.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SklandAccountId", "GameId", "Uid", "RoleId")
+                    b.HasIndex("MihoyoAccountId", "GameBiz", "GameUid")
                         .IsUnique();
 
-                    b.ToTable("SklandGameRoles", (string)null);
+                    b.ToTable("MihoyoGameRoles", (string)null);
                 });
 
-            modelBuilder.Entity("OhMyBot.Plugins.Skland.Data.PluginCoreUser", b =>
+            modelBuilder.Entity("OhMyBot.Plugins.Mihoyo.Data.PluginCoreUser", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -181,27 +165,27 @@ namespace OhMyBot.Plugins.Skland.Data.Migrations
                         });
                 });
 
-            modelBuilder.Entity("OhMyBot.Core.Infrastructure.Data.Entities.SklandAccount", b =>
+            modelBuilder.Entity("OhMyBot.Core.Infrastructure.Data.Entities.MihoyoAccount", b =>
                 {
-                    b.HasOne("OhMyBot.Plugins.Skland.Data.PluginCoreUser", null)
+                    b.HasOne("OhMyBot.Plugins.Mihoyo.Data.PluginCoreUser", null)
                         .WithMany()
                         .HasForeignKey("CoreUserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("OhMyBot.Core.Infrastructure.Data.Entities.SklandGameRole", b =>
+            modelBuilder.Entity("OhMyBot.Core.Infrastructure.Data.Entities.MihoyoGameRole", b =>
                 {
-                    b.HasOne("OhMyBot.Core.Infrastructure.Data.Entities.SklandAccount", "SklandAccount")
+                    b.HasOne("OhMyBot.Core.Infrastructure.Data.Entities.MihoyoAccount", "MihoyoAccount")
                         .WithMany("Roles")
-                        .HasForeignKey("SklandAccountId")
+                        .HasForeignKey("MihoyoAccountId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("SklandAccount");
+                    b.Navigation("MihoyoAccount");
                 });
 
-            modelBuilder.Entity("OhMyBot.Core.Infrastructure.Data.Entities.SklandAccount", b =>
+            modelBuilder.Entity("OhMyBot.Core.Infrastructure.Data.Entities.MihoyoAccount", b =>
                 {
                     b.Navigation("Roles");
                 });

@@ -18,7 +18,9 @@ OhMyBot/
 
 ```bash
 dotnet build OhMyBot.Plugins.slnx
-dotnet test tests/OhMyBot.Plugins.Tests/OhMyBot.Plugins.Tests.csproj
+dotnet test tests/OhMyBot.Plugins.Kuro.Tests/OhMyBot.Plugins.Kuro.Tests.csproj
+dotnet test tests/OhMyBot.Plugins.Mihoyo.Tests/OhMyBot.Plugins.Mihoyo.Tests.csproj
+dotnet test tests/OhMyBot.Plugins.Skland.Tests/OhMyBot.Plugins.Skland.Tests.csproj
 ```
 
 输出位于 `build/<ProjectName>/`。插件 Build 后会自动部署到 Core Host 同配置输出的 `Plugins/<PluginName>/`。
@@ -35,6 +37,6 @@ dotnet new ohmybot-plugin -n Example \
   --SupportedPlatforms All
 ```
 
-`SupportedPlatforms` 可选 `All`、`Telegram` 或 `QQ`。生成后把生成目录中的 `*Tests.cs.txt` 移入测试项目并改为 `.cs`。
+`SupportedPlatforms` 可选 `All`、`Telegram` 或 `QQ`。每个插件必须拥有独立测试项目，且测试项目只能引用对应插件；生成后把 `*Tests.cs.txt` 移入该插件的测试项目并改为 `.cs`。
 
 无私有依赖时，Debug 包只包含 `Plugin.dll`、`Plugin.pdb` 和 `pluginsettings.template.json`。Core、Contracts 和插件公共 API 由 Host 提供。

@@ -53,7 +53,7 @@ public sealed class KuroPlugin : CommandPlugin
 
         services.AddScoped<INotificationSubscriptionService, HostNotificationSubscriptionServiceBridge>();
         services.AddPluginEfBaseline<KuroDbContext>(new EfBaselineOptions(
-            "com.ohmybot.kuro", "__EFMigrationsHistory_Kuro", ["KuroAccounts", "KuroGameRoles"], "KuroAccounts"));
+            "com.ohmybot.kuro", "KuroAccounts"));
         services.AddScoped<KuroAccountService>();
         services.AddScoped<KuroSignService>();
         services.AddScoped<KuroResponseBuilder>();

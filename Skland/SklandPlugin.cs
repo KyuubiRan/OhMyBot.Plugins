@@ -61,7 +61,7 @@ public sealed class SklandPlugin : CommandPlugin
 
         services.AddScoped<INotificationSubscriptionService, HostNotificationSubscriptionServiceBridge>();
         services.AddPluginEfBaseline<SklandDbContext>(new EfBaselineOptions(
-            "com.ohmybot.skland", "__EFMigrationsHistory_Skland", ["SklandAccounts", "SklandGameRoles"], "SklandAccounts"));
+            "com.ohmybot.skland", "SklandAccounts"));
         services.AddHttpClient<SklandHttpClient>((provider, client) =>
         {
             var options = provider.GetRequiredService<IOptions<SklandOptions>>().Value;

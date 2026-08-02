@@ -1,9 +1,7 @@
 using OhMyBot.Contracts.Grpc;
 
-namespace OhMyBot.Tests;
+namespace OhMyBot.Plugins.Mihoyo.Tests;
 
-// 测试辅助：从新的 per-platform CommandResponse 中取出最终渲染内容。
-// Core 现在直接产出各平台最终内容，断言应针对这些内容而非旧的 data_kind/typed payload。
 internal static class ResponseTestExtensions
 {
     public static IReadOnlyList<TelegramMessage> TgMessages(this CommandResponse response) => response.Telegram.Messages;

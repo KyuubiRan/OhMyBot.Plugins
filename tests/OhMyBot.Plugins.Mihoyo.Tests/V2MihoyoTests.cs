@@ -12,7 +12,7 @@ using OhMyBot.Core.Commanding.Notifications;
 using OhMyBot.Core.Infrastructure.Security;
 using OhMyBot.Plugins.Mihoyo.Data;
 
-namespace OhMyBot.Tests;
+namespace OhMyBot.Plugins.Mihoyo.Tests;
 
 [TestClass]
 public class V2MihoyoTests
