@@ -5,6 +5,7 @@ using OhMyBot.Contracts.Grpc;
 using OhMyBot.Core.Commanding.Callbacks;
 using OhMyBot.Core.Commanding.Commands;
 using OhMyBot.Core.Commanding.Presentation;
+using OhMyBot.Core.Commanding.Qq;
 using OhMyBot.Core.Infrastructure.Data;
 using OhMyBot.Core.Infrastructure.Data.Entities;
 using OhMyBot.Core.Infrastructure.Identity;
@@ -320,6 +321,37 @@ public class V2MihoyoTests
     {
         Assert.AreEqual(MihoyoResponseBuilder.NoneSelectionSentinel, MihoyoResponseBuilder.SerializeGameSignSelection([]));
         Assert.AreEqual("genshin,sr", MihoyoResponseBuilder.SerializeGameSignSelection(["genshin", "sr"]));
+    }
+
+    [TestMethod]
+    public async Task AutoSignPanelSurvivesQqNumberedMenuConversion()
+    {
+        // QQ 用不了官方按钮，面板在 gRPC 边界由 QqMenuConverter 拍平成编号菜单。
+        // 插件本身没有平台分支，所以这次改的文案和新增按钮应当原样传导到 QQ。
+        var accounts = new[]
+        {
+            new MihoyoAccount { Id = 1, CoreUserId = 1, DisplayName = "Mi1", Region = MihoyoRegion.Cn, AutoSignEnabled = true },
+            new MihoyoAccount { Id = 2, CoreUserId = 1, DisplayName = "Mi2", Region = MihoyoRegion.Cn, AutoSignEnabled = false }
+        };
+        var builder = new MihoyoResponseBuilder(
+            new CallbackActionStore(new FakeDistributedCache(), Options.Create(new CallbackActionOptions())),
+            new NotificationSubscriptionService(CreateCoreDbContext(), TimeProvider.System),
+            TimeProvider.System);
+        var converter = new QqMenuConverter(
+            new QqMenuStore(new FakeDistributedCache(), Options.Create(new QqMenuOptions())));
+
+        var qq = await converter.ToQqAsync(
+            await builder.BuildAutoSignPanelAsync(CreateContext(), accounts), BotChatType.Private);
+
+        var text = qq.QqText();
+        // 正文的 MarkdownV2 转义已被还原成用户实际看到的样子。
+        Assert.Contains("[米游社-自动签到]", text);
+        Assert.Contains("点击账号进入设置：", text);
+        // 账号按钮与全部开关拍平成连续编号，一个都不能丢。
+        Assert.Contains("1. [开] Mi1 #1", text);
+        Assert.Contains("2. [关] Mi2 #2", text);
+        Assert.Contains("3. 开启/关闭全部", text);
+        Assert.IsFalse(string.IsNullOrEmpty(qq.Qq.Messages[0].MenuToken));
     }
 
     private static MihoyoResponseBuilder CreateBuilder()

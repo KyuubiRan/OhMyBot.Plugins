@@ -6,6 +6,7 @@ using OhMyBot.Core.Commanding.Callbacks;
 using OhMyBot.Core.Commanding.Commands;
 using OhMyBot.Core.Commanding.Notifications;
 using OhMyBot.Core.Commanding.Presentation;
+using OhMyBot.Core.Commanding.Qq;
 using OhMyBot.Core.Infrastructure.Data;
 using OhMyBot.Core.Infrastructure.Data.Entities;
 using OhMyBot.Core.Infrastructure.Identity;
@@ -106,6 +107,31 @@ public class V2SklandTests
         Assert.IsTrue(response.TgButtonTexts().Any(text => text == "下一页"));
         Assert.IsTrue(response.TgButtonTexts().Any(text => text == "开启/关闭全部"));
         Assert.IsTrue(response.TgButtonTexts().Any(text => text == "返回账号列表"));
+    }
+
+    [TestMethod]
+    public async Task AutoSignPanelSurvivesQqNumberedMenuConversion()
+    {
+        // QQ 用不了官方按钮，面板在 gRPC 边界由 QqMenuConverter 拍平成编号菜单。
+        // 插件本身没有任何平台分支，所以这次改的文案和新增按钮应当原样传导到 QQ；
+        // 尤其是账号按钮从 1 列改成 2 列——行结构会被拍平，对 QQ 不应有任何影响。
+        var cache = new FakeDistributedCache();
+        var converter = new QqMenuConverter(
+            new QqMenuStore(cache, Options.Create(new QqMenuOptions())));
+        var panel = await CreateBuilder().BuildAutoSignPanelAsync(CreateContext(), CreateAccounts(2));
+
+        var qq = await converter.ToQqAsync(panel, BotChatType.Private);
+
+        var text = qq.QqText();
+        // 正文的 MarkdownV2 转义已被还原成用户实际看到的样子。
+        Assert.Contains("[森空岛-自动签到]", text);
+        Assert.Contains("点击账号进入设置：", text);
+        Assert.Contains("[开] #1 Skland1", text);
+        // 两列的账号按钮 + 全部开关拍平成连续编号，一个都不能丢。
+        Assert.Contains("1. [开] Skland1 #1", text);
+        Assert.Contains("2. [关] Skland2 #2", text);
+        Assert.Contains("3. 开启/关闭全部", text);
+        Assert.IsFalse(string.IsNullOrEmpty(qq.Qq.Messages[0].MenuToken));
     }
 
     private static SklandResponseBuilder CreateBuilder()

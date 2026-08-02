@@ -1,5 +1,6 @@
 using System.Net;
 using OhMyBot.Core.Commanding.Presentation;
+using OhMyBot.Core.Commanding.Qq;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -295,6 +296,37 @@ public class V2KuroTests
 
         var single = await builder.BuildGameSignSelectionAsync(CreateContext(), [many[0]]);
         Assert.HasCount(1, single.TgButtonRows());
+    }
+
+    [TestMethod]
+    public async Task AutoSignPanelSurvivesQqNumberedMenuConversion()
+    {
+        // QQ 用不了官方按钮，面板在 gRPC 边界由 QqMenuConverter 拍平成编号菜单。
+        // 插件本身没有平台分支，所以这次改的文案和新增按钮应当原样传导到 QQ。
+        var accounts = new[]
+        {
+            new KuroAccount { Id = 1, CoreUserId = 1, BbsUserId = 1001, DisplayName = "Kuro1", AutoSignEnabled = true },
+            new KuroAccount { Id = 2, CoreUserId = 1, BbsUserId = 1002, DisplayName = "Kuro2", AutoSignEnabled = false }
+        };
+        var builder = new KuroResponseBuilder(
+            new CallbackActionStore(new FakeDistributedCache(), Options.Create(new CallbackActionOptions())),
+            new NotificationSubscriptionService(CreateCoreDbContext(), TimeProvider.System),
+            TimeProvider.System);
+        var converter = new QqMenuConverter(
+            new QqMenuStore(new FakeDistributedCache(), Options.Create(new QqMenuOptions())));
+
+        var qq = await converter.ToQqAsync(
+            await builder.BuildAutoSignPanelAsync(CreateContext(), accounts), BotChatType.Private);
+
+        var text = qq.QqText();
+        // 正文的 MarkdownV2 转义已被还原成用户实际看到的样子。
+        Assert.Contains("[库街区-自动签到]", text);
+        Assert.Contains("点击账号进入设置：", text);
+        // 账号按钮与全部开关拍平成连续编号，一个都不能丢。
+        Assert.Contains("1. [开] Kuro1 #1", text);
+        Assert.Contains("2. [关] Kuro2 #2", text);
+        Assert.Contains("3. 开启/关闭全部", text);
+        Assert.IsFalse(string.IsNullOrEmpty(qq.Qq.Messages[0].MenuToken));
     }
 
     private static KuroResponseBuilder CreateBuilder()
