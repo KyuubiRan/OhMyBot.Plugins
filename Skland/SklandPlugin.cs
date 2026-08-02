@@ -24,12 +24,12 @@ namespace OhMyBot.Plugins.Skland;
     SupportedPlatforms = PluginSupportedPlatforms.All)]
 public sealed class SklandPlugin : CommandPlugin
 {
-    protected override void ConfigureServices(IServiceCollection services)
+    protected override void ConfigureServices(IServiceCollection services, IConfiguration configuration)
     {
         services.AddOptions<SklandOptions>()
             .BindConfiguration("Skland");
         services.AddOptions<ScheduledTaskOptions>("SklandAutoSign")
-            .Configure<IConfiguration>((options, configuration) =>
+            .Configure(options =>
                 ScheduledTaskOptions.Bind(options, configuration.GetSection("ScheduledTask")))
             .ValidateOnStart();
 

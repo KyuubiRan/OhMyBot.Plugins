@@ -18,7 +18,7 @@ namespace OhMyBot.Plugins.TemplatePluginName;
 #endif
 public sealed class TemplatePluginNamePlugin : CommandPlugin
 {
-    protected override void ConfigureServices(IServiceCollection services)
+    protected override void ConfigureServices(IServiceCollection services, IConfiguration configuration)
     {
     }
 

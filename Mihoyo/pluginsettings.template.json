@@ -11,11 +11,9 @@
     "BbsForumId": "26",
     "Timeout": "00:00:30"
   },
-  "ScheduledTasks": {
-    "MihoyoAutoSign": {
-      "Enabled": true,
-      "Cron": "10 0 * * *",
-      "Args": {}
-    }
+  "ScheduledTask": {
+    "Enabled": true,
+    "Cron": "10 0 * * *",
+    "Args": {}
   }
 }

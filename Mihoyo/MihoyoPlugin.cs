@@ -25,17 +25,19 @@ namespace OhMyBot.Plugins.Mihoyo;
     SupportedPlatforms = PluginSupportedPlatforms.All)]
 public sealed class MihoyoPlugin : CommandPlugin
 {
+    protected override void ConfigureServices(IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<MihoyoOptions>()
+            .Bind(configuration.GetSection("Mihoyo"));
+        services.AddOptions<ScheduledTaskOptions>("MihoyoAutoSign")
+            .Configure(options =>
+                ScheduledTaskOptions.Bind(options, configuration.GetSection("ScheduledTask")))
+            .ValidateOnStart();
+    }
+
     protected override void ConfigureCommanding(ICommandPluginBuilder builder)
     {
         var services = builder.Services;
-
-        services.AddOptions<MihoyoOptions>()
-            .Bind(builder.Configuration.GetSection("Mihoyo"));
-        services.AddOptions<ScheduledTaskOptions>("MihoyoAutoSign")
-            .Configure(options => ScheduledTaskOptions.Bind(
-                options,
-                builder.Configuration.GetSection("ScheduledTasks:MihoyoAutoSign")))
-            .ValidateOnStart();
 
         services.TryAddSingleton(typeof(ILogger<>), typeof(Logger<>));
         services.AddDbContext<MihoyoDbContext>((serviceProvider, options) =>

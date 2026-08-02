@@ -23,12 +23,12 @@ namespace OhMyBot.Plugins.Kuro;
     SupportedPlatforms = PluginSupportedPlatforms.All)]
 public sealed class KuroPlugin : CommandPlugin
 {
-    protected override void ConfigureServices(IServiceCollection services)
+    protected override void ConfigureServices(IServiceCollection services, IConfiguration configuration)
     {
         services.AddOptions<KuroOptions>()
             .BindConfiguration("Kuro");
         services.AddOptions<ScheduledTaskOptions>("KuroAutoSign")
-            .Configure<IConfiguration>((options, configuration) =>
+            .Configure(options =>
                 ScheduledTaskOptions.Bind(options, configuration.GetSection("ScheduledTask")));
 
         services.AddDbContext<KuroDbContext>((serviceProvider, options) =>
