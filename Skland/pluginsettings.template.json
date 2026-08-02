@@ -9,7 +9,7 @@
   },
   "ScheduledTask": {
     "Enabled": true,
-    "Cron": "40 0 * * *",
+    "Cron": "10 0 * * *",
     "Args": {}
   }
 }
