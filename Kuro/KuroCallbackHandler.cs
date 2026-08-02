@@ -137,7 +137,7 @@ public sealed class KuroCallbackHandler(
             }
         }
 
-        return builder.BuildCombinedResult(context, "[库街区社区签到 - 全部账号]", results, editMessageId);
+        return builder.BuildCombinedResult(context, "[库街区-手动社区签到 - 全部账号]", results, editMessageId);
     }
 
     private async Task<CommandResponse> ExecuteGameSignSelectAsync(
@@ -293,7 +293,7 @@ public sealed class KuroCallbackHandler(
             }
         }
 
-        return builder.BuildCombinedResult(context, "[库街区游戏签到 - 全部账号]", results, editMessageId);
+        return builder.BuildCombinedResult(context, "[库街区-手动游戏签到 - 全部账号]", results, editMessageId);
     }
 
     private async Task<CommandResponse> ExecuteAutoSignRootMenuAsync(
@@ -331,7 +331,7 @@ public sealed class KuroCallbackHandler(
         var accountService = scope.ServiceProvider.GetRequiredService<KuroAccountService>();
         var builder = scope.ServiceProvider.GetRequiredService<KuroResponseBuilder>();
         var accounts = await accountService.ListByOwnerAsync(context.Identity.CoreUserId, noTracking: true, cancellationToken);
-        return await builder.BuildAutoSignAccountPanelAsync(context, accounts, data.AccountId, editMessageId, cancellationToken);
+        return await builder.BuildAutoSignAccountPanelAsync(context, accounts, data.AccountId, editMessageId, cancellationToken, data.Page);
     }
 
     private async Task<CommandResponse> ExecuteAutoSignBbsMenuAsync(
@@ -350,7 +350,7 @@ public sealed class KuroCallbackHandler(
         var accountService = scope.ServiceProvider.GetRequiredService<KuroAccountService>();
         var builder = scope.ServiceProvider.GetRequiredService<KuroResponseBuilder>();
         var accounts = await accountService.ListByOwnerAsync(context.Identity.CoreUserId, noTracking: true, cancellationToken);
-        return await builder.BuildAutoSignBbsPanelAsync(context, accounts, data.AccountId, editMessageId, cancellationToken);
+        return await builder.BuildAutoSignBbsPanelAsync(context, accounts, data.AccountId, editMessageId, cancellationToken, data.Page);
     }
 
     private async Task<CommandResponse> ExecuteAutoSignGameMenuAsync(
@@ -393,13 +393,24 @@ public sealed class KuroCallbackHandler(
         await using var scope = scopeFactory.CreateAsyncScope();
         var accountService = scope.ServiceProvider.GetRequiredService<KuroAccountService>();
         var builder = scope.ServiceProvider.GetRequiredService<KuroResponseBuilder>();
+
+        // 主菜单的「开启/关闭全部」：翻转后回到主菜单本身，而不是某个账号详情。
+        if (data.ToggleAll)
+        {
+            var all = await accountService.ToggleAllAutoSignAsync(context.Identity.CoreUserId, cancellationToken);
+            return all.Count == 0
+                ? CallbackError(context.Identity, editMessageId, "未找到指定库街区账号。")
+                : await builder.BuildAutoSignPanelAsync(context, all, editMessageId, cancellationToken, data.Page);
+        }
+
         var accounts = await accountService.ToggleAutoSignAsync(context.Identity.CoreUserId, data.AccountId, cancellationToken);
         if (accounts.Count == 0)
         {
             return CallbackError(context.Identity, editMessageId, "未找到指定库街区账号。");
         }
 
-        return await builder.BuildAutoSignAccountPanelAsync(context, accounts, data.AccountId, editMessageId, cancellationToken);
+        return await builder.BuildAutoSignAccountPanelAsync(
+            context, accounts, data.AccountId, editMessageId, cancellationToken, data.Page);
     }
 
     private async Task<CommandResponse> ExecuteBbsTaskToggleAsync(

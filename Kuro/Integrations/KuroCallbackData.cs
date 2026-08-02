@@ -18,7 +18,11 @@ public sealed record KuroGameSignAllCallbackData;
 
 public sealed record KuroGameSignBackCallbackData;
 
-public sealed record KuroAutoSignCallbackData(long AccountId);
+/// <summary>
+/// 账号级自动签到开关。ToggleAll / Page 是后加的可选属性——重启瞬间用户手上还持有
+/// TTL 内的旧按钮，旧 payload 反序列化后取默认值，行为与旧版一致。不要改名或删字段。
+/// </summary>
+public sealed record KuroAutoSignCallbackData(long AccountId, bool ToggleAll = false, int Page = 0);
 
 public sealed record KuroBbsTaskCallbackData(long AccountId, long TaskFlag);
 

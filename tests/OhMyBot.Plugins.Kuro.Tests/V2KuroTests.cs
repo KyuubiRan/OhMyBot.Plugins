@@ -1,4 +1,5 @@
 using System.Net;
+using OhMyBot.Core.Commanding.Presentation;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -161,6 +162,36 @@ public class V2KuroTests
         Assert.Contains("第 1/2 页", response.TgText());
         Assert.IsTrue(response.TgButtonTexts().Any(text => text == "下一页"));
         Assert.IsFalse(response.TgButtonTexts().Any(text => text.Contains("Kuro9", StringComparison.Ordinal)));
+        Assert.IsTrue(response.TgButtonTexts().Any(text => text == "开启/关闭全部"));
+    }
+
+    [TestMethod]
+    public async Task KuroAutoSignPanelOmitsPageSuffixForSinglePage()
+    {
+        // 四个插件的面板要在「账号不多」这个常见情形下逐字一致，所以单页时不能带页码后缀，
+        // 也不能出现翻页按钮。多页分支由 KuroAutoSignPanelUsesPagedAccountFirstLevel 覆盖。
+        await using var dbContext = CreateDbContext();
+        var builder = new KuroResponseBuilder(
+            new CallbackActionStore(new FakeDistributedCache(), Options.Create(new CallbackActionOptions())),
+            new NotificationSubscriptionService(CreateCoreDbContext(), TimeProvider.System),
+            TimeProvider.System);
+        var accounts = new[]
+        {
+            new KuroAccount { Id = 1, CoreUserId = 1, BbsUserId = 1001, DisplayName = "Kuro1", AutoSignEnabled = true },
+            new KuroAccount { Id = 2, CoreUserId = 1, BbsUserId = 1002, DisplayName = "Kuro2", AutoSignEnabled = false }
+        };
+
+        var response = await builder.BuildAutoSignPanelAsync(CreateContext(), accounts);
+
+        // 面板正文是 MarkdownV2 转义过的，还原成用户实际看到的样子再断言。
+        var plain = MarkdownV2.ToPlain(response.TgText());
+        Assert.Contains("[库街区-自动签到]", plain);
+        Assert.Contains("点击账号进入设置：", plain);
+        Assert.Contains("[开] #1 Kuro1", plain);
+        Assert.Contains("[关] #2 Kuro2", plain);
+        Assert.DoesNotContain("第 ", plain);
+        Assert.IsFalse(response.TgButtonTexts().Any(text => text is "上一页" or "下一页"));
+        Assert.IsTrue(response.TgButtonTexts().Any(text => text == "开启/关闭全部"));
     }
 
     [TestMethod]

@@ -15,6 +15,25 @@ public sealed class KuroResponseBuilder(
     private const int AccountsPerPage = 8;
     private const int RolesPerPage = 6;
 
+    private const string PreviousPageText = "上一页";
+    private const string NextPageText = "下一页";
+    private const string ToggleAllText = "开启/关闭全部";
+    private const string NotifyHintLine = "如需管理签到结果的消息推送，请使用 `/notify`";
+
+    private static readonly (long Flag, string Label)[] BbsTaskLabels =
+    [
+        (KuroBbsTaskFlags.SignIn, "签到"),
+        (KuroBbsTaskFlags.ViewPosts, "浏览"),
+        (KuroBbsTaskFlags.LikePosts, "点赞"),
+        (KuroBbsTaskFlags.SharePosts, "分享")
+    ];
+
+    /// <summary>单页时不显示页码，好让四个插件的面板在常见情形下逐字一致。</summary>
+    private static string PageSuffix(int page, int totalPages)
+    {
+        return totalPages <= 1 ? string.Empty : $"（第 {page + 1}/{totalPages} 页）";
+    }
+
     public async Task<CommandResponse> BuildAccountListAsync(
         CommandContext context,
         IReadOnlyList<KuroAccount> accounts,
@@ -62,19 +81,19 @@ public sealed class KuroResponseBuilder(
         string? editMessageId = null,
         CancellationToken cancellationToken = default)
     {
-        var response = CommandResponses.Text("请选择要执行社区签到的库街区账号：", context);
-        ApplyEdit(response, editMessageId);
-        foreach (var account in accounts)
-        {
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "kuro-bbs-sign-select", $"{account.DisplayName} #{account.Id}",
-                new KuroBbsSignCallbackData(account.Id, actions.ToArray()), cancellationToken)));
-        }
+        var response = CommandResponses.Text("请选择要执行社区签到的库街区账号：", context)
+            .AsTelegramEditIfSpecified(editMessageId);
+        var panel = new PanelBuilder(callbackStore, context);
+        await panel.AddGridAsync(
+            response, accounts, columns: 1, "kuro-bbs-sign-select",
+            account => $"{account.DisplayName} #{account.Id}",
+            account => new KuroBbsSignCallbackData(account.Id, actions.ToArray()),
+            cancellationToken);
 
         if (accounts.Count > 1)
         {
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "kuro-bbs-sign-all", "全部签到", new KuroBbsSignAllCallbackData(), cancellationToken)));
+            await panel.AddRowAsync(
+                response, "kuro-bbs-sign-all", "全部签到", new KuroBbsSignAllCallbackData(), cancellationToken);
         }
 
         return response;
@@ -86,19 +105,19 @@ public sealed class KuroResponseBuilder(
         string? editMessageId = null,
         CancellationToken cancellationToken = default)
     {
-        var response = CommandResponses.Text("请选择要执行游戏签到的库街区账号：", context);
-        ApplyEdit(response, editMessageId);
-        foreach (var account in accounts)
-        {
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "kuro-game-sign-panel", $"{account.DisplayName} #{account.Id}",
-                new KuroGameSignPanelCallbackData(account.Id), cancellationToken)));
-        }
+        var response = CommandResponses.Text("请选择要执行游戏签到的库街区账号：", context)
+            .AsTelegramEditIfSpecified(editMessageId);
+        var panel = new PanelBuilder(callbackStore, context);
+        await panel.AddGridAsync(
+            response, accounts, columns: 1, "kuro-game-sign-panel",
+            account => $"{account.DisplayName} #{account.Id}",
+            account => new KuroGameSignPanelCallbackData(account.Id),
+            cancellationToken);
 
         if (accounts.Count > 1)
         {
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "kuro-game-sign-all", "全部签到", new KuroGameSignAllCallbackData(), cancellationToken)));
+            await panel.AddRowAsync(
+                response, "kuro-game-sign-all", "全部签到", new KuroGameSignAllCallbackData(), cancellationToken);
         }
 
         return response;
@@ -117,41 +136,35 @@ public sealed class KuroResponseBuilder(
         var available = AvailableGameIds(account);
         if (available.Count == 0)
         {
-            var empty = CommandResponses.Text(
-                $"账号 #{account.Id} {account.DisplayName} 暂无游戏角色，请先使用 /kuro game init {account.Id} 同步", context);
-            ApplyEdit(empty, editMessageId);
-            return empty;
+            return CommandResponses.Text(
+                    $"账号 #{account.Id} {account.DisplayName} 暂无游戏角色，请先使用 /kuro game init {account.Id} 同步", context)
+                .AsTelegramEditIfSpecified(editMessageId);
         }
 
         var selectedSet = new HashSet<long>(selected);
         var lines = new List<string>
         {
-            "[库街区游戏签到]",
+            "[库街区-手动游戏签到]",
             $"账号：#{account.Id} {account.DisplayName}",
             "勾选要签到的游戏（√=签到 ×=跳过），然后点击「签到」："
         };
         lines.AddRange(available.Select(gameId => FormatGameRolesLine(account, gameId)));
-        var response = CommandResponses.Text(string.Join('\n', lines), context);
-        ApplyEdit(response, editMessageId);
+        var response = CommandResponses.Text(string.Join('\n', lines), context)
+            .AsTelegramEditIfSpecified(editMessageId);
+        var panel = new PanelBuilder(callbackStore, context);
 
-        foreach (var gameId in available)
-        {
-            var name = KuroGameNames.Format(gameId, account.Roles.FirstOrDefault(role => role.GameId == gameId)?.GameName ?? string.Empty);
-            response.AddButtonRow(SingleButtonRow(await ButtonAsync(
-                context, "kuro-game-sign-panel", $"{(selectedSet.Contains(gameId) ? "[√]" : "[×]")} {name}",
-                new KuroGameSignPanelCallbackData(account.Id, Toggle: gameId), cancellationToken)));
-        }
+        await panel.AddGridAsync(
+            response, available, columns: 1, "kuro-game-sign-panel",
+            gameId => $"{(selectedSet.Contains(gameId) ? "[√]" : "[×]")} " +
+                KuroGameNames.Format(gameId, account.Roles.FirstOrDefault(role => role.GameId == gameId)?.GameName ?? string.Empty),
+            gameId => new KuroGameSignPanelCallbackData(account.Id, Toggle: gameId),
+            cancellationToken);
 
-        response.AddButtonRow(new ResponseButtonRow
-        {
-            Buttons =
-            {
-                await ButtonAsync(context, "kuro-game-sign-run", "签到",
-                    new KuroGameSignPanelCallbackData(account.Id), cancellationToken),
-                await ButtonAsync(context, "kuro-game-sign-back", "返回",
-                    new KuroGameSignBackCallbackData(), cancellationToken)
-            }
-        });
+        response.AddButtonRow(PanelBuilder.Row(
+            await panel.ButtonAsync("kuro-game-sign-run", "签到",
+                new KuroGameSignPanelCallbackData(account.Id), cancellationToken),
+            await panel.ButtonAsync("kuro-game-sign-back", "返回",
+                new KuroGameSignBackCallbackData(), cancellationToken)));
         return response;
     }
 
@@ -172,9 +185,8 @@ public sealed class KuroResponseBuilder(
 
         blocks.Add(string.Empty);
         blocks.Add("时间：" + timeProvider.GetUtcNow().ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
-        var response = CommandResponses.Text(string.Join('\n', blocks), context);
-        ApplyEdit(response, editMessageId);
-        return response;
+        return CommandResponses.Text(string.Join('\n', blocks), context)
+            .AsTelegramEditIfSpecified(editMessageId);
     }
 
     /// <summary>账号已同步角色去重后的游戏 Id，按 Id 排序。</summary>
@@ -278,30 +290,8 @@ public sealed class KuroResponseBuilder(
         return string.Join('\n', lines);
     }
 
-    private async Task<ResponseButton> ButtonAsync(
-        CommandContext context, string actionType, string text, object data, CancellationToken cancellationToken)
-    {
-        return new ResponseButton
-        {
-            Text = text,
-            Payload = await callbackStore.PutAsync(
-                actionType, context.Identity.CoreUserId, context.Request.ChatId, context.Request.UserId,
-                data, cancellationToken: cancellationToken)
-        };
-    }
 
-    private static ResponseButtonRow SingleButtonRow(ResponseButton button)
-    {
-        return new ResponseButtonRow { Buttons = { button } };
-    }
 
-    private static void ApplyEdit(CommandResponse response, string? editMessageId)
-    {
-        if (!string.IsNullOrWhiteSpace(editMessageId))
-        {
-            response.AsTelegramEdit(editMessageId);
-        }
-    }
 
     public async Task<CommandResponse> BuildDeletePanelAsync(
         CommandContext context,
@@ -340,30 +330,40 @@ public sealed class KuroResponseBuilder(
         CancellationToken cancellationToken = default,
         int page = 0)
     {
-        page = NormalizePage(page, accounts.Count, AccountsPerPage);
-        var response = CommandResponses.Text(BuildAutoSignText(accounts, page), context);
-        ApplyEdit(response, editMessageId);
+        var totalPages = Pagination.TotalPages(accounts.Count, AccountsPerPage);
+        page = Pagination.NormalizePage(page, accounts.Count, AccountsPerPage);
+        var response = CommandResponses.Text(BuildAutoSignText(accounts, page, totalPages), context)
+            .AsTelegramEditIfSpecified(editMessageId);
+        if (accounts.Count == 0)
+        {
+            return response;
+        }
 
-        await AddPagedAccountButtonsAsync(
+        var panel = new PanelBuilder(callbackStore, context);
+        await panel.AddGridAsync(
             response,
-            context,
-            accounts,
+            Pagination.Slice(accounts, page, AccountsPerPage),
+            columns: 2,
             "kuro-autosign-account-menu",
-            account => new KuroAutoSignMenuCallbackData(account.Id, "account"),
-            page,
-            AccountsPerPage,
+            account => $"{(account.AutoSignEnabled ? "[开]" : "[关]")} {account.DisplayName} #{account.Id}",
+            account => new KuroAutoSignMenuCallbackData(account.Id, "account", page),
             cancellationToken);
-        await AddPageNavigationButtonsAsync(
+        await panel.AddPagerAsync(
             response,
-            context,
             "kuro-autosign-root-menu",
-            accountId: 0,
-            level: "root",
             page,
-            totalCount: accounts.Count,
-            pageSize: AccountsPerPage,
+            totalPages,
+            target => new KuroAutoSignMenuCallbackData(0, "root", target),
+            PreviousPageText,
+            NextPageText,
             cancellationToken);
-        return await Task.FromResult(response);
+        await panel.AddRowAsync(
+            response,
+            "kuro-auto-sign-toggle",
+            ToggleAllText,
+            new KuroAutoSignCallbackData(0, ToggleAll: true, Page: page),
+            cancellationToken);
+        return response;
     }
 
     public async Task<CommandResponse> BuildAutoSignAccountPanelAsync(
@@ -371,7 +371,8 @@ public sealed class KuroResponseBuilder(
         IReadOnlyList<KuroAccount> accounts,
         long accountId,
         string? editMessageId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int page = 0)
     {
         var account = accounts.FirstOrDefault(item => item.Id == accountId);
         if (account is null)
@@ -379,55 +380,29 @@ public sealed class KuroResponseBuilder(
             return CommandResponses.Error("KuroAccountMissing", "未找到指定库街区账号", context);
         }
 
-        var response = CommandResponses.Text(BuildAutoSignAccountDetailText(account), context);
-        ApplyEdit(response, editMessageId);
+        var response = CommandResponses.Text(BuildAutoSignAccountDetailText(account), context)
+            .AsTelegramEditIfSpecified(editMessageId);
+        var panel = new PanelBuilder(callbackStore, context);
 
-        response.AddButtonRow(new ResponseButtonRow
-        {
-            Buttons =
-            {
-                new ResponseButton
-                {
-                    Text = account.AutoSignEnabled ? "[开] 总开关" : "[关] 总开关",
-                    Payload = await callbackStore.PutAsync(
-                        "kuro-auto-sign-toggle",
-                        context.Identity.CoreUserId,
-                        context.Request.ChatId,
-                        context.Request.UserId,
-                        new KuroAutoSignCallbackData(account.Id),
-                        cancellationToken: cancellationToken)
-                }
-            }
-        });
-        response.AddButtonRow(new ResponseButtonRow
-        {
-            Buttons =
-            {
-                new ResponseButton
-                {
-                    Text = "库街区",
-                    Payload = await callbackStore.PutAsync(
-                        "kuro-autosign-bbs-menu",
-                        context.Identity.CoreUserId,
-                        context.Request.ChatId,
-                        context.Request.UserId,
-                        new KuroAutoSignMenuCallbackData(account.Id, "bbs"),
-                        cancellationToken: cancellationToken)
-                },
-                new ResponseButton
-                {
-                    Text = "游戏角色",
-                    Payload = await callbackStore.PutAsync(
-                        "kuro-autosign-game-menu",
-                        context.Identity.CoreUserId,
-                        context.Request.ChatId,
-                        context.Request.UserId,
-                        new KuroAutoSignMenuCallbackData(account.Id, "game"),
-                        cancellationToken: cancellationToken)
-                }
-            }
-        });
-        response.AddButtonRow(await BackRowAsync(context, "返回账号列表", "kuro-autosign-root-menu", new KuroAutoSignMenuCallbackData(0, "root"), cancellationToken));
+        await panel.AddRowAsync(
+            response,
+            "kuro-auto-sign-toggle",
+            account.AutoSignEnabled ? "[开] 总开关" : "[关] 总开关",
+            new KuroAutoSignCallbackData(account.Id, Page: page),
+            cancellationToken);
+        response.AddButtonRow(PanelBuilder.Row(
+            await panel.ButtonAsync(
+                "kuro-autosign-bbs-menu", "社区任务",
+                new KuroAutoSignMenuCallbackData(account.Id, "bbs", page), cancellationToken),
+            await panel.ButtonAsync(
+                "kuro-autosign-game-menu", "游戏角色",
+                new KuroAutoSignMenuCallbackData(account.Id, "game"), cancellationToken)));
+        await panel.AddRowAsync(
+            response,
+            "kuro-autosign-root-menu",
+            "返回账号列表",
+            new KuroAutoSignMenuCallbackData(0, "root", page),
+            cancellationToken);
         return response;
     }
 
@@ -436,7 +411,8 @@ public sealed class KuroResponseBuilder(
         IReadOnlyList<KuroAccount> accounts,
         long accountId,
         string? editMessageId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int page = 0)
     {
         var account = accounts.FirstOrDefault(item => item.Id == accountId);
         if (account is null)
@@ -444,43 +420,30 @@ public sealed class KuroResponseBuilder(
             return CommandResponses.Error("KuroAccountMissing", "未找到指定库街区账号", context);
         }
 
-        var response = CommandResponses.Text(BuildAutoSignBbsText(account), context);
-        ApplyEdit(response, editMessageId);
+        var response = CommandResponses.Text(BuildAutoSignBbsText(account), context)
+            .AsTelegramEditIfSpecified(editMessageId);
+        var panel = new PanelBuilder(callbackStore, context);
 
-        response.AddButtonRow(new ResponseButtonRow
-        {
-            Buttons =
-            {
-                await TaskButtonAsync(context, account, KuroBbsTaskFlags.SignIn, "签到", cancellationToken),
-                await TaskButtonAsync(context, account, KuroBbsTaskFlags.ViewPosts, "浏览", cancellationToken)
-            }
-        });
-        response.AddButtonRow(new ResponseButtonRow
-        {
-            Buttons =
-            {
-                await TaskButtonAsync(context, account, KuroBbsTaskFlags.LikePosts, "点赞", cancellationToken),
-                await TaskButtonAsync(context, account, KuroBbsTaskFlags.SharePosts, "分享", cancellationToken)
-            }
-        });
-        response.AddButtonRow(new ResponseButtonRow
-        {
-            Buttons =
-            {
-                new ResponseButton
-                {
-                    Text = "开启/关闭全部",
-                    Payload = await callbackStore.PutAsync(
-                        "kuro-bbs-task-toggle-all",
-                        context.Identity.CoreUserId,
-                        context.Request.ChatId,
-                        context.Request.UserId,
-                        new KuroBbsTaskToggleAllCallbackData(account.Id),
-                        cancellationToken: cancellationToken)
-                }
-            }
-        });
-        response.AddButtonRow(await BackRowAsync(context, "返回", "kuro-autosign-account-menu", new KuroAutoSignMenuCallbackData(account.Id, "account"), cancellationToken));
+        await panel.AddGridAsync(
+            response,
+            BbsTaskLabels,
+            columns: 2,
+            "kuro-bbs-task-toggle",
+            item => $"{(((account.BbsTaskFlags & item.Flag) != 0) ? "[开]" : "[关]")} {item.Label}",
+            item => new KuroBbsTaskCallbackData(account.Id, item.Flag),
+            cancellationToken);
+        await panel.AddRowAsync(
+            response,
+            "kuro-bbs-task-toggle-all",
+            ToggleAllText,
+            new KuroBbsTaskToggleAllCallbackData(account.Id),
+            cancellationToken);
+        await panel.AddRowAsync(
+            response,
+            "kuro-autosign-account-menu",
+            "返回",
+            new KuroAutoSignMenuCallbackData(account.Id, "account", page),
+            cancellationToken);
         return response;
     }
 
@@ -499,191 +462,47 @@ public sealed class KuroResponseBuilder(
         }
 
         var orderedRoles = account.Roles.OrderBy(role => role.GameId).ThenBy(role => role.RoleId).ToArray();
-        page = NormalizePage(page, orderedRoles.Length, RolesPerPage);
-        var response = CommandResponses.Text(BuildAutoSignGameText(account, page), context);
-        ApplyEdit(response, editMessageId);
+        var totalPages = Pagination.TotalPages(orderedRoles.Length, RolesPerPage);
+        page = Pagination.NormalizePage(page, orderedRoles.Length, RolesPerPage);
+        var response = CommandResponses.Text(BuildAutoSignGameText(account, orderedRoles, page, totalPages), context)
+            .AsTelegramEditIfSpecified(editMessageId);
+        var panel = new PanelBuilder(callbackStore, context);
 
-        await AddPagedRoleButtonsAsync(response, context, account, orderedRoles, page, RolesPerPage, cancellationToken);
-        await AddPageNavigationButtonsAsync(
+        await panel.AddGridAsync(
             response,
-            context,
-            "kuro-autosign-game-menu",
-            account.Id,
-            level: "game",
-            page,
-            totalCount: orderedRoles.Length,
-            pageSize: RolesPerPage,
+            Pagination.Slice(orderedRoles, page, RolesPerPage),
+            columns: 1,
+            "kuro-game-auto-sign-toggle",
+            role => $"{(role.AutoSignEnabled ? "[开]" : "[关]")} {role.GameName}/{role.RoleName}",
+            role => new KuroGameAutoSignCallbackData(role.Id, account.Id, page),
             cancellationToken);
-        response.AddButtonRow(new ResponseButtonRow
-        {
-            Buttons =
-            {
-                new ResponseButton
-                {
-                    Text = "开启/关闭全部",
-                    Payload = await callbackStore.PutAsync(
-                        "kuro-game-auto-sign-toggle-all",
-                        context.Identity.CoreUserId,
-                        context.Request.ChatId,
-                        context.Request.UserId,
-                        new KuroGameAutoSignToggleAllCallbackData(account.Id, page),
-                        cancellationToken: cancellationToken)
-                }
-            }
-        });
-        response.AddButtonRow(await BackRowAsync(context, "返回", "kuro-autosign-account-menu", new KuroAutoSignMenuCallbackData(account.Id, "account"), cancellationToken));
+        await panel.AddPagerAsync(
+            response,
+            "kuro-autosign-game-menu",
+            page,
+            totalPages,
+            target => new KuroAutoSignMenuCallbackData(account.Id, "game", target),
+            PreviousPageText,
+            NextPageText,
+            cancellationToken);
+        await panel.AddRowAsync(
+            response,
+            "kuro-game-auto-sign-toggle-all",
+            ToggleAllText,
+            new KuroGameAutoSignToggleAllCallbackData(account.Id, page),
+            cancellationToken);
+        await panel.AddRowAsync(
+            response,
+            "kuro-autosign-account-menu",
+            "返回",
+            new KuroAutoSignMenuCallbackData(account.Id, "account"),
+            cancellationToken);
         return response;
     }
 
-    private async Task AddPagedAccountButtonsAsync(
-        CommandResponse response,
-        CommandContext context,
-        IReadOnlyList<KuroAccount> accounts,
-        string actionType,
-        Func<KuroAccount, object> dataFactory,
-        int page,
-        int pageSize,
-        CancellationToken cancellationToken)
-    {
-        var row = new ResponseButtonRow();
-        foreach (var account in accounts.Skip(page * pageSize).Take(pageSize))
-        {
-            row.Buttons.Add(new ResponseButton
-            {
-                Text = $"{(account.AutoSignEnabled ? "[开]" : "[关]")} {account.DisplayName}",
-                Payload = await callbackStore.PutAsync(
-                    actionType,
-                    context.Identity.CoreUserId,
-                    context.Request.ChatId,
-                    context.Request.UserId,
-                    dataFactory(account),
-                    cancellationToken: cancellationToken)
-            });
 
-            if (row.Buttons.Count == 2)
-            {
-                response.AddButtonRow(row);
-                row = new ResponseButtonRow();
-            }
-        }
 
-        if (row.Buttons.Count > 0)
-        {
-            response.AddButtonRow(row);
-        }
-    }
 
-    private async Task AddPagedRoleButtonsAsync(
-        CommandResponse response,
-        CommandContext context,
-        KuroAccount account,
-        IReadOnlyList<KuroGameRole> roles,
-        int page,
-        int pageSize,
-        CancellationToken cancellationToken)
-    {
-        var row = new ResponseButtonRow();
-        foreach (var role in roles.Skip(page * pageSize).Take(pageSize))
-        {
-            row.Buttons.Add(new ResponseButton
-            {
-                Text = $"{(role.AutoSignEnabled ? "[开]" : "[关]")} {role.GameName}/{role.RoleName}",
-                Payload = await callbackStore.PutAsync(
-                    "kuro-game-auto-sign-toggle",
-                    context.Identity.CoreUserId,
-                    context.Request.ChatId,
-                    context.Request.UserId,
-                    new KuroGameAutoSignCallbackData(role.Id, account.Id, page),
-                    cancellationToken: cancellationToken)
-            });
-
-            if (row.Buttons.Count == 1)
-            {
-                response.AddButtonRow(row);
-                row = new ResponseButtonRow();
-            }
-        }
-    }
-
-    private async Task AddPageNavigationButtonsAsync(
-        CommandResponse response,
-        CommandContext context,
-        string actionType,
-        long accountId,
-        string level,
-        int page,
-        int totalCount,
-        int pageSize,
-        CancellationToken cancellationToken)
-    {
-        var totalPages = GetTotalPages(totalCount, pageSize);
-        if (totalPages <= 1)
-        {
-            return;
-        }
-
-        var row = new ResponseButtonRow();
-        if (page > 0)
-        {
-            row.Buttons.Add(new ResponseButton
-            {
-                Text = "上一页",
-                Payload = await callbackStore.PutAsync(
-                    actionType,
-                    context.Identity.CoreUserId,
-                    context.Request.ChatId,
-                    context.Request.UserId,
-                    new KuroAutoSignMenuCallbackData(accountId, level, page - 1),
-                    cancellationToken: cancellationToken)
-            });
-        }
-
-        if (page + 1 < totalPages)
-        {
-            row.Buttons.Add(new ResponseButton
-            {
-                Text = "下一页",
-                Payload = await callbackStore.PutAsync(
-                    actionType,
-                    context.Identity.CoreUserId,
-                    context.Request.ChatId,
-                    context.Request.UserId,
-                    new KuroAutoSignMenuCallbackData(accountId, level, page + 1),
-                    cancellationToken: cancellationToken)
-            });
-        }
-
-        if (row.Buttons.Count > 0)
-        {
-            response.AddButtonRow(row);
-        }
-    }
-
-    private async Task<ResponseButtonRow> BackRowAsync(
-        CommandContext context,
-        string text,
-        string actionType,
-        object data,
-        CancellationToken cancellationToken)
-    {
-        return new ResponseButtonRow
-        {
-            Buttons =
-            {
-                new ResponseButton
-                {
-                    Text = text,
-                    Payload = await callbackStore.PutAsync(
-                        actionType,
-                        context.Identity.CoreUserId,
-                        context.Request.ChatId,
-                        context.Request.UserId,
-                        data,
-                        cancellationToken: cancellationToken)
-                }
-            }
-        };
-    }
 
     public async Task<CommandResponse> BuildNotifyTypePanelAsync(
         CommandContext context,
@@ -759,157 +578,97 @@ public sealed class KuroResponseBuilder(
             replyToMessageId: editMessageId is null ? context.Request.MessageId : null,
             editMessageId: editMessageId);
 
-        var row = new ResponseButtonRow();
-        foreach (var account in accounts)
-        {
-            row.Buttons.Add(new ResponseButton
-            {
-                Text = $"{(enabled.Contains(account.Id) ? "[开]" : "[关]")} {account.DisplayName}",
-                Payload = await callbackStore.PutAsync(
-                    "notify-account-toggle",
-                    context.Identity.CoreUserId,
-                    context.Request.ChatId,
-                    context.Request.UserId,
-                    new NotifyAccountCallbackData(NotificationTypes.KuroAutoSign, account.Id, ToggleAll: false),
-                    cancellationToken: cancellationToken)
-            });
+        var panel = new PanelBuilder(callbackStore, context);
+        await panel.AddGridAsync(
+            response,
+            accounts,
+            columns: 2,
+            "notify-account-toggle",
+            account => $"{(enabled.Contains(account.Id) ? "[开]" : "[关]")} {account.DisplayName}",
+            account => new NotifyAccountCallbackData(NotificationTypes.KuroAutoSign, account.Id, ToggleAll: false),
+            cancellationToken);
 
-            if (row.Buttons.Count == 2)
-            {
-                response.AddButtonRow(row);
-                row = new ResponseButtonRow();
-            }
-        }
-
-        if (row.Buttons.Count > 0)
-        {
-            response.AddButtonRow(row);
-        }
-
-        response.AddButtonRow(new ResponseButtonRow
-        {
-            Buttons =
-            {
-                new ResponseButton
-                {
-                    Text = "开启/关闭全部",
-                    Payload = await callbackStore.PutAsync(
-                        "notify-account-toggle",
-                        context.Identity.CoreUserId,
-                        context.Request.ChatId,
-                        context.Request.UserId,
-                        new NotifyAccountCallbackData(NotificationTypes.KuroAutoSign, 0, ToggleAll: true),
-                        cancellationToken: cancellationToken)
-                },
-                new ResponseButton
-                {
-                    Text = "返回",
-                    Payload = await callbackStore.PutAsync(
-                        "notify-back",
-                        context.Identity.CoreUserId,
-                        context.Request.ChatId,
-                        context.Request.UserId,
-                        new NotifyBackCallbackData(),
-                        cancellationToken: cancellationToken)
-                }
-            }
-        });
+        response.AddButtonRow(PanelBuilder.Row(
+            await panel.ButtonAsync(
+                "notify-account-toggle", ToggleAllText,
+                new NotifyAccountCallbackData(NotificationTypes.KuroAutoSign, 0, ToggleAll: true), cancellationToken),
+            await panel.ButtonAsync(
+                "notify-back", "返回", new NotifyBackCallbackData(), cancellationToken)));
         return response;
     }
 
-    private async Task<ResponseButton> TaskButtonAsync(
-        CommandContext context,
-        KuroAccount account,
-        long taskFlag,
-        string text,
-        CancellationToken cancellationToken)
-    {
-        return new ResponseButton
-        {
-            Text = $"{(((account.BbsTaskFlags & taskFlag) != 0) ? "[开]" : "[关]")} {text}",
-            Payload = await callbackStore.PutAsync(
-                "kuro-bbs-task-toggle",
-                context.Identity.CoreUserId,
-                context.Request.ChatId,
-                context.Request.UserId,
-                new KuroBbsTaskCallbackData(account.Id, taskFlag),
-                cancellationToken: cancellationToken)
-        };
-    }
 
-    private static string BuildAutoSignText(IReadOnlyList<KuroAccount> accounts, int page)
+    private static string BuildAutoSignText(IReadOnlyList<KuroAccount> accounts, int page, int totalPages)
     {
         if (accounts.Count == 0)
         {
             return "尚未绑定库街区账号";
         }
 
-        var totalPages = GetTotalPages(accounts.Count, AccountsPerPage);
-        var lines = new List<string> { "[库街区自动签到管理]", $"请选择账号（第 {page + 1}/{totalPages} 页）：" };
-        foreach (var account in accounts.Skip(page * AccountsPerPage).Take(AccountsPerPage))
+        var lines = new List<string>
         {
-            lines.Add($"#{account.Id} {account.DisplayName}：{(account.AutoSignEnabled ? "开启" : "关闭")}");
-        }
-
-        lines.Add("如需管理签到结果的消息推送，请使用 `/notify`");
+            "[库街区-自动签到]",
+            "点击账号进入设置" + PageSuffix(page, totalPages) + "："
+        };
+        lines.AddRange(Pagination.Slice(accounts, page, AccountsPerPage)
+            .Select(account => $"{(account.AutoSignEnabled ? "[开]" : "[关]")} #{account.Id} {account.DisplayName}"));
+        lines.Add(NotifyHintLine);
         return string.Join('\n', lines);
     }
 
     private static string BuildAutoSignAccountDetailText(KuroAccount account)
     {
         return string.Join('\n',
-            "[库街区自动签到管理]",
+            "[库街区-自动签到]",
             $"账号：#{account.Id} {account.DisplayName}",
             $"总开关：{(account.AutoSignEnabled ? "开启" : "关闭")}",
-            $"库街区：{FormatBbsTasks(account.BbsTaskFlags)}",
+            $"社区任务：{FormatBbsTasks(account.BbsTaskFlags)}",
             "游戏角色：" + FormatGameRoles(account));
     }
 
     private static string BuildAutoSignBbsText(KuroAccount account)
     {
         return string.Join('\n',
-            "[库街区自动签到 - 库街区]",
+            "[库街区-自动签到 - 社区任务]",
             $"账号：#{account.Id} {account.DisplayName}",
+            "点击任务开关自动签到：",
             $"当前已启用：{FormatBbsTasks(account.BbsTaskFlags)}");
     }
 
-    private static string BuildAutoSignGameText(KuroAccount account, int page)
+    private static string BuildAutoSignGameText(
+        KuroAccount account,
+        IReadOnlyList<KuroGameRole> roles,
+        int page,
+        int totalPages)
     {
-        var totalPages = GetTotalPages(account.Roles.Count, RolesPerPage);
-        return string.Join('\n',
-            "[库街区自动签到 - 游戏角色]",
+        var lines = new List<string>
+        {
+            "[库街区-自动签到 - 游戏角色]",
             $"账号：#{account.Id} {account.DisplayName}",
-            $"第 {page + 1}/{totalPages} 页",
-            "当前已启用：" + FormatGameRoles(account, onlyEnabled: true));
+            "点击角色开关自动签到" + PageSuffix(page, totalPages) + "："
+        };
+        lines.AddRange(Pagination.Slice(roles, page, RolesPerPage)
+            .Select(role => $"{(role.AutoSignEnabled ? "[开]" : "[关]")} {role.GameName}/{role.RoleName}"));
+        return string.Join('\n', lines);
     }
 
     private static string FormatGameRoles(KuroAccount account, bool onlyEnabled = false)
     {
-        var roles = account.Roles
-            .Where(role => !onlyEnabled || role.AutoSignEnabled)
-            .Select(role => $"{role.GameName}/{role.RoleName}")
-            .ToArray();
-        return roles.Length == 0 ? "无" : string.Join("、", roles);
+        return TextLayout.JoinOrEmpty(
+            account.Roles
+                .Where(role => !onlyEnabled || role.AutoSignEnabled)
+                .Select(role => $"{role.GameName}/{role.RoleName}"),
+            "、",
+            "无");
     }
 
     private static string FormatBbsTasks(long flags)
     {
-        var enabled = new List<string>();
-        if ((flags & KuroBbsTaskFlags.SignIn) != 0) enabled.Add("签到");
-        if ((flags & KuroBbsTaskFlags.ViewPosts) != 0) enabled.Add("浏览");
-        if ((flags & KuroBbsTaskFlags.LikePosts) != 0) enabled.Add("点赞");
-        if ((flags & KuroBbsTaskFlags.SharePosts) != 0) enabled.Add("分享");
-        return enabled.Count == 0 ? "无" : string.Join("、", enabled);
+        return TextLayout.JoinOrEmpty(
+            BbsTaskLabels.Where(item => (flags & item.Flag) != 0).Select(item => item.Label),
+            "、",
+            "无");
     }
 
-    private static int NormalizePage(int page, int totalCount, int pageSize)
-    {
-        var totalPages = GetTotalPages(totalCount, pageSize);
-        return Math.Clamp(page, 0, totalPages - 1);
-    }
 
-    private static int GetTotalPages(int totalCount, int pageSize)
-    {
-        return Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
-    }
 }

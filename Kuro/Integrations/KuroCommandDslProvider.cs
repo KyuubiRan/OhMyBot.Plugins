@@ -46,7 +46,7 @@ public sealed class KuroCommandDslProvider(IServiceScopeFactory scopeFactory) : 
                             Node("signin", "执行库街区游戏签到", "/kuro game signin [accountId] [wuwa|pgr|all]", GameSignAsync)
                         ]
                     },
-                    Node("autosign", "库街区自动签到管理", "/kuro autosign", AutoSignAsync),
+                    Node("autosign", "自动签到管理", "/kuro autosign", AutoSignAsync),
                     Node("delete", "删除库街区绑定", "/kuro delete", DeleteAsync)
                 ]
             }
