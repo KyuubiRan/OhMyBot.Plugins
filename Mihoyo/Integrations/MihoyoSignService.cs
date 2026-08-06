@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using OhMyBot.Core.Commanding.Commands;
 using OhMyBot.Core.Infrastructure.Data.Entities;
 
 namespace OhMyBot.Core.Integrations.Mihoyo;
@@ -376,14 +377,14 @@ public sealed class MihoyoSignService(
         if (string.IsNullOrEmpty(credential.Stoken))
         {
             await accountService.ClearCredentialAsync(account.Id, cancellationToken);
-            throw new InvalidOperationException("Cookie 已失效且缺少 stoken，请重新绑定米游社账号");
+            throw new CommandUserException("MihoyoCookieExpired", "Cookie 已失效且缺少 stoken，请重新绑定米游社账号");
         }
 
         var response = await client.RefreshCookieTokenAsync(credential.StokenCookie, cancellationToken);
         if (!response.Ok || string.IsNullOrEmpty(response.Data?.CookieToken))
         {
             await accountService.ClearCredentialAsync(account.Id, cancellationToken);
-            throw new InvalidOperationException("stoken 已失效，请重新绑定米游社账号");
+            throw new CommandUserException("MihoyoStokenExpired", "stoken 已失效，请重新绑定米游社账号");
         }
 
         var cookie = MihoyoAccountService.SetCookieToken(credential.Cookie, response.Data.CookieToken);
@@ -399,7 +400,7 @@ public sealed class MihoyoSignService(
         }
 
         await accountService.ClearCredentialAsync(account.Id, cancellationToken);
-        throw new InvalidOperationException("Cookie/stoken 已失效，请重新绑定米游社账号");
+        throw new CommandUserException("MihoyoCookieExpired", "Cookie/stoken 已失效，请重新绑定米游社账号");
     }
 
     private IEnumerable<MihoyoGameRole> ResolveGameTargets(

@@ -264,7 +264,7 @@ public sealed class KuroCommandDslProvider(IServiceScopeFactory scopeFactory) : 
             var account = accounts.FirstOrDefault(item => item.Id == accountId);
             if (account is null)
             {
-                throw new InvalidOperationException("未找到指定库街区账号");
+                throw new CommandUserException("KuroAccountNotFound", "未找到指定库街区账号");
             }
 
             return account;

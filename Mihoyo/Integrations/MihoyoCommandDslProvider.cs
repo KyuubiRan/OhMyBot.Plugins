@@ -269,7 +269,7 @@ public sealed class MihoyoCommandDslProvider(IServiceScopeFactory scopeFactory) 
             var account = accounts.FirstOrDefault(item => item.Id == accountId);
             if (account is null)
             {
-                throw new InvalidOperationException("未找到指定米游社账号");
+                throw new CommandUserException("MihoyoAccountNotFound", "未找到指定米游社账号");
             }
 
             return account;

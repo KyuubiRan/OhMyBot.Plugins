@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using OhMyBot.Contracts.Grpc;
+using OhMyBot.Core.Commanding.Commands;
 using OhMyBot.Core.Infrastructure.Data;
 using OhMyBot.Core.Infrastructure.Data.Entities;
 using OhMyBot.Core.Infrastructure.Security;
@@ -22,7 +23,7 @@ public sealed class KuroAccountService(
         token = token.Trim();
         if (string.IsNullOrWhiteSpace(token))
         {
-            throw new InvalidOperationException("Token 不能为空");
+            throw new CommandUserException("KuroTokenRequired", "Token 不能为空");
         }
 
         var credential = new KuroRequestCredential(token, devCode, distinctId);
@@ -32,7 +33,7 @@ public sealed class KuroAccountService(
             .FirstOrDefaultAsync(account => account.BbsUserId == profile.BbsUserId, cancellationToken);
         if (existing is not null && existing.CoreUserId != coreUserId)
         {
-            throw new InvalidOperationException("该库街区账号已被其他用户绑定");
+            throw new CommandUserException("KuroAccountOwnedByOthers", "该库街区账号已被其他用户绑定");
         }
 
         var now = timeProvider.GetUtcNow();
@@ -110,11 +111,11 @@ public sealed class KuroAccountService(
         var account = await dbContext.KuroAccounts
             .Include(item => item.Roles)
             .FirstOrDefaultAsync(item => item.Id == accountId && item.CoreUserId == coreUserId, cancellationToken)
-            ?? throw new InvalidOperationException("未找到指定库街区账号");
+            ?? throw new CommandUserException("KuroAccountNotFound", "未找到指定库街区账号");
         var profile = await ResolveProfileAsync(GetCredential(account), cancellationToken);
         if (profile.BbsUserId != account.BbsUserId)
         {
-            throw new InvalidOperationException("Token 对应的库街区账号与当前绑定不一致，请重新绑定");
+            throw new CommandUserException("KuroAccountMismatch", "Token 对应的库街区账号与当前绑定不一致，请重新绑定");
         }
 
         account.DisplayName = profile.DisplayName;
@@ -322,7 +323,7 @@ public sealed class KuroAccountService(
     {
         if (string.IsNullOrEmpty(account.TokenCiphertext))
         {
-            throw new InvalidOperationException("Token 已失效，请重新绑定库街区账号");
+            throw new CommandUserException("KuroTokenExpired", "Token 已失效，请重新绑定库街区账号");
         }
 
         return secretProtector.Unprotect(account.TokenCiphertext);

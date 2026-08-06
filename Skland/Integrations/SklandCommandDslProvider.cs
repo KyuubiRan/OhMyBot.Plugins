@@ -229,7 +229,7 @@ public sealed class SklandCommandDslProvider(IServiceScopeFactory scopeFactory) 
             var account = accounts.FirstOrDefault(a => a.Id == accountId);
             if (account is null)
             {
-                throw new InvalidOperationException("未找到指定森空岛账号");
+                throw new CommandUserException("SklandAccountNotFound", "未找到指定森空岛账号");
             }
 
             return account;

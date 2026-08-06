@@ -139,8 +139,11 @@ public class V2MihoyoTests
     {
         await using var dbContext = CreateDbContext();
         var service = CreateAccountService(dbContext, new StubHandler());
-        await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+        // Cookie 抓漏了是用户自己能修的，必须抛 CommandUserException——抛普通异常会被 Core 兜底
+        // 折叠成「请稍后重试 + 错误 id」，用户只会拿同一份残缺 Cookie 反复重试。
+        var exception = await Assert.ThrowsExactlyAsync<CommandUserException>(
             () => service.BindAsync(1, "some=value; another=thing"));
+        StringAssert.Contains(exception.Message, "account_id");
     }
 
     [TestMethod]

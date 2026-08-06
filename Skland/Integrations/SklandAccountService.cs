@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using OhMyBot.Contracts.Grpc;
+using OhMyBot.Core.Commanding.Commands;
 using OhMyBot.Core.Infrastructure.Data;
 using OhMyBot.Core.Infrastructure.Data.Entities;
 using OhMyBot.Core.Infrastructure.Security;
@@ -22,7 +23,7 @@ public sealed class SklandAccountService(
         hgToken = hgToken.Trim();
         if (string.IsNullOrWhiteSpace(hgToken))
         {
-            throw new InvalidOperationException("鹰角 Token 不能为空");
+            throw new CommandUserException("SklandTokenRequired", "鹰角 Token 不能为空");
         }
 
         var deviceId = NewDeviceId();
@@ -43,7 +44,7 @@ public sealed class SklandAccountService(
             .FirstOrDefaultAsync(a => a.SklandUserId == sklandUserId, cancellationToken);
         if (existing is not null && existing.CoreUserId != coreUserId)
         {
-            throw new InvalidOperationException("该森空岛账号已被其他用户绑定");
+            throw new CommandUserException("SklandAccountOwnedByOthers", "该森空岛账号已被其他用户绑定");
         }
 
         var now = timeProvider.GetUtcNow();
@@ -127,7 +128,7 @@ public sealed class SklandAccountService(
         var account = await dbContext.SklandAccounts
             .Include(a => a.Roles)
             .FirstOrDefaultAsync(a => a.Id == accountId && a.CoreUserId == coreUserId, cancellationToken)
-            ?? throw new InvalidOperationException("未找到指定森空岛账号");
+            ?? throw new CommandUserException("SklandAccountNotFound", "未找到指定森空岛账号");
 
         var (signToken, cred) = GetTokens(account);
         var binding = await client.GetBindingAsync(signToken, cred, account.DeviceId, cancellationToken);

@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using OhMyBot.Contracts.Grpc;
+using OhMyBot.Core.Commanding.Commands;
 using OhMyBot.Core.Infrastructure.Data;
 using OhMyBot.Core.Infrastructure.Data.Entities;
 using OhMyBot.Core.Infrastructure.Security;
@@ -30,13 +31,13 @@ public sealed partial class MihoyoAccountService(
         var cookie = NormalizeCookie(cookieInput);
         if (cookie.Length == 0)
         {
-            throw new InvalidOperationException("Cookie 不能为空");
+            throw new CommandUserException("MihoyoCookieRequired", "Cookie 不能为空");
         }
 
         var stuidMatch = StuidRegex().Match(cookie);
         if (!stuidMatch.Success || !long.TryParse(stuidMatch.Groups[1].Value, out var stuid))
         {
-            throw new InvalidOperationException("Cookie 缺少 account_id/ltuid，请重新抓取米游社/HoYoLAB 的 Cookie");
+            throw new CommandUserException("MihoyoCookieIncomplete", "Cookie 缺少 account_id/ltuid，请重新抓取米游社/HoYoLAB 的 Cookie");
         }
 
         var mid = MidRegex().Match(cookie) is { Success: true } midMatch ? midMatch.Groups[1].Value : string.Empty;
@@ -53,7 +54,7 @@ public sealed partial class MihoyoAccountService(
             .FirstOrDefaultAsync(account => account.Region == region && account.Stuid == stuid, cancellationToken);
         if (existing is not null && existing.CoreUserId != coreUserId)
         {
-            throw new InvalidOperationException("该米游社账号已被其他用户绑定");
+            throw new CommandUserException("MihoyoAccountOwnedByOthers", "该米游社账号已被其他用户绑定");
         }
 
         var updatedExisting = existing is not null;
@@ -219,7 +220,7 @@ public sealed partial class MihoyoAccountService(
         var account = await dbContext.MihoyoAccounts
             .Include(item => item.Roles)
             .FirstOrDefaultAsync(item => item.Id == accountId && item.CoreUserId == coreUserId, cancellationToken)
-            ?? throw new InvalidOperationException("未找到指定米游社账号");
+            ?? throw new CommandUserException("MihoyoAccountNotFound", "未找到指定米游社账号");
         var now = timeProvider.GetUtcNow();
         await SyncRolesAsync(account, GetCredential(account), now, cancellationToken);
         account.UpdatedAt = now;
@@ -427,7 +428,7 @@ public sealed partial class MihoyoAccountService(
     {
         if (string.IsNullOrEmpty(account.CookieCiphertext))
         {
-            throw new InvalidOperationException("Cookie 已失效，请重新绑定米游社账号");
+            throw new CommandUserException("MihoyoCookieExpired", "Cookie 已失效，请重新绑定米游社账号");
         }
 
         var cookie = secretProtector.Unprotect(account.CookieCiphertext);

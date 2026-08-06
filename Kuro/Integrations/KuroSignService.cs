@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using OhMyBot.Core.Commanding.Commands;
 using OhMyBot.Core.Infrastructure.Data.Entities;
 
 namespace OhMyBot.Core.Integrations.Kuro;
@@ -207,7 +208,7 @@ public sealed class KuroSignService(
             if (result.Code == KuroHttpClient.TokenExpiredCode)
             {
                 await accountService.ClearTokenAsync(account.Id, cancellationToken);
-                throw new InvalidOperationException("Token 已失效，请重新绑定库街区账号");
+                throw new CommandUserException("KuroTokenExpired", "Token 已失效，请重新绑定库街区账号");
             }
 
             if (result.Success)
@@ -239,7 +240,7 @@ public sealed class KuroSignService(
         if (response.Code == KuroHttpClient.TokenExpiredCode)
         {
             await accountService.ClearTokenAsync(account.Id, cancellationToken);
-            throw new InvalidOperationException("Token 已失效，请重新绑定库街区账号");
+            throw new CommandUserException("KuroTokenExpired", "Token 已失效，请重新绑定库街区账号");
         }
 
         throw new InvalidOperationException(messagePrefix + response.Msg);
@@ -253,7 +254,7 @@ public sealed class KuroSignService(
         }
 
         await accountService.ClearTokenAsync(account.Id, cancellationToken);
-        throw new InvalidOperationException("Token 已失效，请重新绑定库街区账号");
+        throw new CommandUserException("KuroTokenExpired", "Token 已失效，请重新绑定库街区账号");
     }
 
     private static bool ShouldDoAction(
