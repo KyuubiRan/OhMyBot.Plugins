@@ -1,0 +1,6 @@
+{
+  "ImageConverter": {
+    "FfmpegPath": "ffmpeg",
+    "TimeoutSeconds": 30
+  }
+}

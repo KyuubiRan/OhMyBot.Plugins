@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <IsOhMyBotPlugin>true</IsOhMyBotPlugin>
+        <PluginName>ImageConverter</PluginName>
+        <AssemblyName>OhMyBot.Plugins.ImageConverter</AssemblyName>
+        <RootNamespace>OhMyBot.Plugins.ImageConverter</RootNamespace>
+        <OpenCvSharpVersion>4.13.0.20260627</OpenCvSharpVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="OpenCvSharp4" Version="$(OpenCvSharpVersion)" GeneratePathProperty="true" />
+        <PackageReference Include="OpenCvSharp4.runtime.linux-arm64" Version="$(OpenCvSharpVersion)" GeneratePathProperty="true" />
+        <PackageReference Include="OpenCvSharp4.runtime.osx.arm64"
+                          Version="$(OpenCvSharpVersion)"
+                          GeneratePathProperty="true"
+                          Condition="'$(Configuration)' != 'Release'" />
+    </ItemGroup>
+
+    <Target Name="PackageOpenCvRuntime"
+            AfterTargets="BuildPluginPackage"
+            BeforeTargets="DeployPluginToLocalHost">
+        <Copy SourceFiles="$(PkgOpenCvSharp4)/lib/net8.0/OpenCvSharp.dll"
+              DestinationFolder="$(PluginPackageDir)" />
+        <Copy SourceFiles="$(PkgOpenCvSharp4_runtime_linux-arm64)/runtimes/linux-arm64/native/libOpenCvSharpExtern.so"
+              DestinationFolder="$(PluginPackageDir)" />
+        <Copy SourceFiles="$(PkgOpenCvSharp4_runtime_osx_arm64)/runtimes/osx-arm64/native/libOpenCvSharpExtern.dylib"
+              DestinationFolder="$(PluginPackageDir)"
+              Condition="'$(Configuration)' != 'Release'" />
+    </Target>
+
+</Project>

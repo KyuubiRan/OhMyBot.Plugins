@@ -3,6 +3,10 @@
     <Project Path="Kuro/OhMyBot.Plugins.Kuro.csproj" />
     <Project Path="tests/OhMyBot.Plugins.Kuro.Tests/OhMyBot.Plugins.Kuro.Tests.csproj" />
   </Folder>
+  <Folder Name="/ImageConverter/">
+    <Project Path="ImageConverter/OhMyBot.Plugins.ImageConverter.csproj" />
+    <Project Path="tests/OhMyBot.Plugins.ImageConverter.Tests/OhMyBot.Plugins.ImageConverter.Tests.csproj" />
+  </Folder>
   <Folder Name="/Mihoyo/">
     <Project Path="Mihoyo/OhMyBot.Plugins.Mihoyo.csproj" />
     <Project Path="tests/OhMyBot.Plugins.Mihoyo.Tests/OhMyBot.Plugins.Mihoyo.Tests.csproj" />
