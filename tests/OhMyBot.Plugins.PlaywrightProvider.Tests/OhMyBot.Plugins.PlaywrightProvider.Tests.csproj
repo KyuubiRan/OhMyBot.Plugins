@@ -7,16 +7,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../Skland/OhMyBot.Plugins.Skland.csproj" />
-    <ProjectReference Include="$(OhMyBotRepositoryRoot)OhMyBot.Contracts/OhMyBot.Contracts.csproj" />
-    <ProjectReference Include="$(OhMyBotRepositoryRoot)OhMyBot.Core/OhMyBot.Core.csproj" />
+    <ProjectReference Include="../../PlaywrightProvider/OhMyBot.Plugins.PlaywrightProvider.csproj" />
     <ProjectReference Include="$(OhMyBotRepositoryRoot)OhMyBot.Plugin.Abstractions/OhMyBot.Plugin.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Playwright" Version="1.62.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.9" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.9" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.6.0" />
     <PackageReference Include="MSTest" Version="4.2.3" />
   </ItemGroup>

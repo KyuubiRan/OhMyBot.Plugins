@@ -10,6 +10,7 @@ namespace OhMyBot.Core.Integrations.Skland;
 public sealed class SklandAccountService(
     SklandDbContext dbContext,
     SklandHttpClient client,
+    ISklandDeviceIdProvider deviceIdProvider,
     ISecretProtector secretProtector,
     TimeProvider timeProvider)
 {
@@ -26,8 +27,10 @@ public sealed class SklandAccountService(
             throw new CommandUserException("SklandTokenRequired", "鹰角 Token 不能为空");
         }
 
-        var deviceId = NewDeviceId();
-        var (cred, signToken, sklandUserId) = await AuthenticateAsync(hgToken, deviceId, cancellationToken);
+        var (cred, signToken, sklandUserId, deviceId) = await AuthenticateWithDeviceRecoveryAsync(
+            hgToken,
+            deviceId: null,
+            cancellationToken);
 
         // 获取绑定角色列表
         var binding = await client.GetBindingAsync(signToken, cred, deviceId, cancellationToken);
@@ -67,6 +70,7 @@ public sealed class SklandAccountService(
         }
         else
         {
+            existing.DeviceId = deviceId;
             existing.DisplayName = displayName;
             existing.HgTokenCiphertext = secretProtector.Protect(hgToken);
             existing.CredCiphertext = secretProtector.Protect(cred);
@@ -373,9 +377,12 @@ public sealed class SklandAccountService(
         }
 
         var hgToken = secretProtector.Unprotect(account.HgTokenCiphertext);
-        var (newCred, newSignToken, _) = await AuthenticateAsync(hgToken, account.DeviceId, cancellationToken);
-        await PersistCredAndSignTokenAsync(account, newCred, newSignToken, cancellationToken);
-        return newSignToken;
+        var authentication = await AuthenticateWithDeviceRecoveryAsync(
+            hgToken,
+            account.DeviceId,
+            cancellationToken);
+        await PersistAuthenticationAsync(account, authentication, cancellationToken);
+        return authentication.SignToken;
     }
 
     private async Task PersistSignTokenAsync(SklandAccount account, string signToken, CancellationToken cancellationToken)
@@ -393,7 +400,10 @@ public sealed class SklandAccountService(
         account.SignTokenCiphertext = tracked.SignTokenCiphertext;
     }
 
-    private async Task PersistCredAndSignTokenAsync(SklandAccount account, string cred, string signToken, CancellationToken cancellationToken)
+    private async Task PersistAuthenticationAsync(
+        SklandAccount account,
+        SklandAuthentication authentication,
+        CancellationToken cancellationToken)
     {
         var tracked = await dbContext.SklandAccounts.FindAsync([account.Id], cancellationToken);
         if (tracked is null)
@@ -401,15 +411,39 @@ public sealed class SklandAccountService(
             return;
         }
 
-        tracked.CredCiphertext = secretProtector.Protect(cred);
-        tracked.SignTokenCiphertext = secretProtector.Protect(signToken);
+        tracked.DeviceId = authentication.DeviceId;
+        tracked.CredCiphertext = secretProtector.Protect(authentication.Cred);
+        tracked.SignTokenCiphertext = secretProtector.Protect(authentication.SignToken);
         tracked.UpdatedAt = timeProvider.GetUtcNow();
         await dbContext.SaveChangesAsync(cancellationToken);
+        account.DeviceId = tracked.DeviceId;
         account.CredCiphertext = tracked.CredCiphertext;
         account.SignTokenCiphertext = tracked.SignTokenCiphertext;
     }
 
     // ---- Internal helpers ----
+
+    private async Task<SklandAuthentication> AuthenticateWithDeviceRecoveryAsync(
+        string hgToken,
+        string? deviceId,
+        CancellationToken cancellationToken)
+    {
+        var candidate = SklandDeviceId.IsOfficial(deviceId)
+            ? deviceId!
+            : await deviceIdProvider.GetDeviceIdAsync(cancellationToken);
+
+        try
+        {
+            var first = await AuthenticateAsync(hgToken, candidate, cancellationToken);
+            return new SklandAuthentication(first.Cred, first.SignToken, first.SklandUserId, candidate);
+        }
+        catch (SklandDeviceInvalidException)
+        {
+            var replacement = await deviceIdProvider.GetDeviceIdAsync(cancellationToken);
+            var retry = await AuthenticateAsync(hgToken, replacement, cancellationToken);
+            return new SklandAuthentication(retry.Cred, retry.SignToken, retry.SklandUserId, replacement);
+        }
+    }
 
     /// <summary>从 HG token 走完两步认证，返回 (cred, signToken, sklandUserId)。</summary>
     private async Task<(string Cred, string SignToken, string SklandUserId)> AuthenticateAsync(
@@ -424,6 +458,11 @@ public sealed class SklandAccountService(
         }
 
         var cred = await client.GenerateCredByCodeAsync(grant.Data.Code, deviceId, cancellationToken);
+        if (cred.Code == SklandHttpClient.DeviceInvalidCode)
+        {
+            throw new SklandDeviceInvalidException();
+        }
+
         if (!cred.IsOk || cred.Data is null)
         {
             throw new InvalidOperationException($"获取森空岛凭证失败：code={cred.Code}, msg={cred.Message}");
@@ -591,10 +630,16 @@ public sealed class SklandAccountService(
         throw new InvalidOperationException($"{prefix}：code={response.Code}, msg={response.Message}");
     }
 
-    private static string NewDeviceId()
-    {
-        return Guid.NewGuid().ToString("N");
-    }
+}
+
+internal sealed record SklandAuthentication(
+    string Cred,
+    string SignToken,
+    string SklandUserId,
+    string DeviceId);
+
+internal sealed class SklandDeviceInvalidException : Exception
+{
 }
 
 public sealed record SklandBindResult(SklandAccount Account, bool UpdatedExisting);

@@ -1,0 +1,7 @@
+{
+  "Playwright": {
+    "Headless": true,
+    "BrowserChannel": "chrome",
+    "BrowserExecutablePath": ""
+  }
+}

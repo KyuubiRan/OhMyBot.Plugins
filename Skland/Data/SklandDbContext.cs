@@ -24,7 +24,7 @@ public sealed class SklandDbContext(DbContextOptions<SklandDbContext> options) :
             builder.ToTable("SklandAccounts");
             builder.HasKey(account => account.Id);
             builder.Property(account => account.SklandUserId).HasMaxLength(128).IsRequired();
-            builder.Property(account => account.DeviceId).HasMaxLength(64).IsRequired();
+            builder.Property(account => account.DeviceId).HasMaxLength(256).IsRequired();
             builder.Property(account => account.DisplayName).HasMaxLength(256).IsRequired();
             builder.Property(account => account.HgTokenCiphertext).HasMaxLength(2048).IsRequired();
             builder.Property(account => account.CredCiphertext).HasMaxLength(2048).IsRequired();

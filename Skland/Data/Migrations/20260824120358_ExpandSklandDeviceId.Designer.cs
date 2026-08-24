@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using OhMyBot.Plugins.Skland.Data;
@@ -11,9 +12,11 @@ using OhMyBot.Plugins.Skland.Data;
 namespace OhMyBot.Plugins.Skland.Data.Migrations
 {
     [DbContext(typeof(SklandDbContext))]
-    partial class SklandDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260824120358_ExpandSklandDeviceId")]
+    partial class ExpandSklandDeviceId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -12,16 +12,18 @@ using OhMyBot.Core.Infrastructure.Security;
 using OhMyBot.Core.Integrations.Skland;
 using OhMyBot.Plugin.Abstractions;
 using OhMyBot.Plugin.Commanding;
+using OhMyBot.Plugins.PlaywrightProvider;
 
 namespace OhMyBot.Plugins.Skland;
 
 [OhMyBotPlugin(
     "com.ohmybot.skland",
     "Skland",
-    "1.0.0",
+    "1.0.1",
     CoreApi = "[1.0.0,2.0.0)",
     LoadPriority = 100,
     SupportedPlatforms = PluginSupportedPlatforms.All)]
+[OhMyBotDependency(PlaywrightProviderPlugin.PluginId, "[1.0.0,2.0.0)")]
 public sealed class SklandPlugin : CommandPlugin
 {
     protected override void ConfigureServices(IServiceCollection services, IConfiguration configuration)
@@ -67,6 +69,8 @@ public sealed class SklandPlugin : CommandPlugin
             var options = provider.GetRequiredService<IOptions<SklandOptions>>().Value;
             client.Timeout = options.Timeout;
         });
+        services.AddPlaywrightProviderClient();
+        services.AddSingleton<ISklandDeviceIdProvider, PlaywrightSklandDeviceIdProvider>();
         services.AddScoped<SklandAccountService>();
         services.AddScoped<SklandSignService>();
         services.AddScoped<SklandResponseBuilder>();

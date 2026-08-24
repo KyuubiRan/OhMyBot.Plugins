@@ -6,4 +6,18 @@
         <AssemblyName>OhMyBot.Plugins.Skland</AssemblyName>
         <RootNamespace>OhMyBot.Plugins.Skland</RootNamespace>
     </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../PlaywrightProvider/OhMyBot.Plugins.PlaywrightProvider.csproj"
+                          Private="false" />
+    </ItemGroup>
+
+    <Target Name="RemoveLegacySklandPlaywrightRuntime"
+            BeforeTargets="DeployPluginToLocalHost">
+        <PropertyGroup>
+            <_SklandDeployDir>$(PluginDeployRoot)$(PluginName)/</_SklandDeployDir>
+        </PropertyGroup>
+        <Delete Files="$(_SklandDeployDir)Microsoft.Playwright.dll;$(_SklandDeployDir)Microsoft.Bcl.AsyncInterfaces.dll" />
+        <RemoveDir Directories="$(_SklandDeployDir).playwright" />
+    </Target>
 </Project>

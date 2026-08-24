@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -15,6 +16,7 @@ public sealed class SklandHttpClient(HttpClient httpClient, IOptions<SklandOptio
 {
     public const int TokenExpiredCode = -10001;
     public const int CredExpiredCode = -10002;
+    public const int DeviceInvalidCode = 10001;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -49,6 +51,9 @@ public sealed class SklandHttpClient(HttpClient httpClient, IOptions<SklandOptio
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{_options.SklandBaseUrl}/web/v1/user/auth/generate_cred_by_code");
         AddCommonHeaders(request, deviceId);
+        request.Headers.TryAddWithoutValidation(
+            "timestamp",
+            DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture));
         request.Content = JsonContent(new { code, kind = 1 });
         using var response = await httpClient.SendAsync(request, cancellationToken);
         return await ReadJsonAsync<SklandApiResponse<SklandCredData>>(response, cancellationToken);
@@ -221,8 +226,9 @@ public sealed class SklandHttpClient(HttpClient httpClient, IOptions<SklandOptio
         timestamp = (DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 2).ToString();
 
         // 签名头 JSON — 键序必须严格固定，不能用 System.Text.Json 默认序列化
+        var headerDeviceId = SklandDeviceId.ToHeaderValue(deviceId);
         var signHeaderJson =
-            $"{{\"platform\":\"3\",\"timestamp\":\"{timestamp}\",\"dId\":\"B{deviceId}\",\"vName\":\"1.0.0\"}}";
+            $"{{\"platform\":\"3\",\"timestamp\":\"{timestamp}\",\"dId\":\"{headerDeviceId}\",\"vName\":\"1.0.0\"}}";
 
         var message = path + query + body + timestamp + signHeaderJson;
 
@@ -255,11 +261,22 @@ public sealed class SklandHttpClient(HttpClient httpClient, IOptions<SklandOptio
 
     private void AddCommonHeaders(HttpRequestMessage request, string deviceId)
     {
-        request.Headers.TryAddWithoutValidation("User-Agent", _options.UserAgent);
+        var isOfficialDevice = SklandDeviceId.IsOfficial(deviceId);
+        request.Headers.TryAddWithoutValidation(
+            "User-Agent",
+            isOfficialDevice ? _options.WebUserAgent : _options.UserAgent);
         request.Headers.TryAddWithoutValidation("platform", "3");
-        request.Headers.TryAddWithoutValidation("dId", "B" + deviceId);
+        request.Headers.TryAddWithoutValidation("dId", SklandDeviceId.ToHeaderValue(deviceId));
         request.Headers.TryAddWithoutValidation("vName", _options.VName);
-        request.Headers.TryAddWithoutValidation("x-requested-with", "com.hypergryph.skland");
+        if (isOfficialDevice)
+        {
+            request.Headers.Referrer = new Uri(_options.WebBaseUrl);
+        }
+        else
+        {
+            request.Headers.TryAddWithoutValidation("x-requested-with", "com.hypergryph.skland");
+        }
+
         request.Headers.Accept.Clear();
         request.Headers.TryAddWithoutValidation("Accept", "application/json");
     }

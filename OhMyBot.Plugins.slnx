@@ -11,6 +11,10 @@
     <Project Path="QqApproval/OhMyBot.Plugins.QqApproval.csproj" />
     <Project Path="tests/OhMyBot.Plugins.QqApproval.Tests/OhMyBot.Plugins.QqApproval.Tests.csproj" />
   </Folder>
+  <Folder Name="/PlaywrightProvider/">
+    <Project Path="PlaywrightProvider/OhMyBot.Plugins.PlaywrightProvider.csproj" />
+    <Project Path="tests/OhMyBot.Plugins.PlaywrightProvider.Tests/OhMyBot.Plugins.PlaywrightProvider.Tests.csproj" />
+  </Folder>
   <Folder Name="/Skland/">
     <Project Path="Skland/OhMyBot.Plugins.Skland.csproj" />
     <Project Path="tests/OhMyBot.Plugins.Skland.Tests/OhMyBot.Plugins.Skland.Tests.csproj" />

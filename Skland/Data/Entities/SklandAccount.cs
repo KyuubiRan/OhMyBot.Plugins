@@ -18,7 +18,7 @@ public class SklandAccount
     /// <summary>森空岛 userId。</summary>
     public string SklandUserId { get; set; } = string.Empty;
 
-    /// <summary>稳定 UUID，格式固定为不带连字符的 32 位小写 hex，dId header 值为 "B" + DeviceId。</summary>
+    /// <summary>森空岛官方设备 SDK 返回的完整 dId；旧数据可能仍为 32 位 UUID。</summary>
     public string DeviceId { get; set; } = string.Empty;
 
     public string DisplayName { get; set; } = string.Empty;
