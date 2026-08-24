@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <IsOhMyBotPlugin>true</IsOhMyBotPlugin>
+        <PluginName>QqApproval</PluginName>
+        <AssemblyName>OhMyBot.Plugins.QqApproval</AssemblyName>
+        <RootNamespace>OhMyBot.Plugins.QqApproval</RootNamespace>
+    </PropertyGroup>
+</Project>

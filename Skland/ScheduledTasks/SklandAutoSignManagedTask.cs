@@ -105,7 +105,8 @@ public sealed class SklandAutoSignManagedTask : ManagedTaskBase
     {
         foreach (var delivery in deliveries)
         {
-            await publisher.PublishAsync(delivery.Platform, delivery.BotInstanceId, delivery.ChatId, [message], cancellationToken);
+            await publisher.PublishAsync(
+                delivery.Platform, delivery.BotInstanceId, delivery.ChatId, [message], cancellationToken: cancellationToken);
         }
     }
 

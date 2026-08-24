@@ -109,7 +109,8 @@ public sealed class KuroAutoSignManagedTask : ManagedTaskBase
     {
         foreach (var delivery in deliveries)
         {
-            await publisher.PublishAsync(delivery.Platform, delivery.BotInstanceId, delivery.ChatId, [message], cancellationToken);
+            await publisher.PublishAsync(
+                delivery.Platform, delivery.BotInstanceId, delivery.ChatId, [message], cancellationToken: cancellationToken);
         }
     }
 

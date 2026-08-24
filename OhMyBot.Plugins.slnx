@@ -7,6 +7,10 @@
     <Project Path="Mihoyo/OhMyBot.Plugins.Mihoyo.csproj" />
     <Project Path="tests/OhMyBot.Plugins.Mihoyo.Tests/OhMyBot.Plugins.Mihoyo.Tests.csproj" />
   </Folder>
+  <Folder Name="/QqApproval/">
+    <Project Path="QqApproval/OhMyBot.Plugins.QqApproval.csproj" />
+    <Project Path="tests/OhMyBot.Plugins.QqApproval.Tests/OhMyBot.Plugins.QqApproval.Tests.csproj" />
+  </Folder>
   <Folder Name="/Skland/">
     <Project Path="Skland/OhMyBot.Plugins.Skland.csproj" />
     <Project Path="tests/OhMyBot.Plugins.Skland.Tests/OhMyBot.Plugins.Skland.Tests.csproj" />

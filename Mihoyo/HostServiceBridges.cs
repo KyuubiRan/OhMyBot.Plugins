@@ -26,11 +26,12 @@ internal sealed class HostNotificationPublisher(IServiceScopeFactory hostScopeFa
         string botInstanceId,
         string chatId,
         IReadOnlyList<string> messages,
+        IReadOnlyList<string>? menuTokens = null,
         CancellationToken cancellationToken = default)
     {
         await using var scope = hostScopeFactory.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<INotificationPublisher>()
-            .PublishAsync(platform, botInstanceId, chatId, messages, cancellationToken);
+            .PublishAsync(platform, botInstanceId, chatId, messages, menuTokens, cancellationToken);
     }
 
     public async Task PublishTelegramAsync(

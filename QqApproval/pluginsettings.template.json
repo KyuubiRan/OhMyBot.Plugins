@@ -1,0 +1,21 @@
+{
+  "QqApproval": {
+    "ApprovalRequiredPrivilege": "owner",
+    "RequestTypes": {
+      "FriendAdd": {
+        "Enabled": true,
+        "RequiredPrivilege": "owner"
+      },
+      "GroupInvite": {
+        "Enabled": true,
+        "RequiredPrivilege": "owner"
+      },
+      "GroupAdd": {
+        "Enabled": false,
+        "RequiredPrivilege": "owner"
+      }
+    },
+    "PendingTtl": "24:00:00",
+    "RejectReason": "管理员拒绝了这个请求。"
+  }
+}
