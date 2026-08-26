@@ -31,8 +31,7 @@ public class V2KuroTests
         var client = new KuroHttpClient(httpClient, Options.Create(new KuroOptions
         {
             DevCode = "dev-a",
-            DistinctId = "distinct-a",
-            Version = "3.0.4"
+            DistinctId = "distinct-a"
         }));
 
         await client.GetMineAsync("token-a");
@@ -47,6 +46,10 @@ public class V2KuroTests
         Assert.AreEqual("dev-b", handler.Requests[1].Headers.GetValues("devCode").Single());
         Assert.AreEqual("distinct-b", handler.Requests[1].Headers.GetValues("distinct_id").Single());
         Assert.AreEqual("h5", handler.Requests[0].Headers.GetValues("source").Single());
+        Assert.AreEqual("3.2.3", handler.Requests[0].Headers.GetValues("version").Single());
+        Assert.AreEqual(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            handler.Requests[0].Headers.UserAgent.ToString());
     }
 
     [TestMethod]

@@ -8,9 +8,9 @@ public sealed class KuroOptions
 
     public string DistinctId { get; set; } = string.Empty;
 
-    public string UserAgent { get; set; } = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36";
+    public string UserAgent { get; set; } = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36";
 
-    public string Version { get; set; } = "3.0.4";
+    public string Version { get; set; } = "3.2.3";
 
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(20);
 }

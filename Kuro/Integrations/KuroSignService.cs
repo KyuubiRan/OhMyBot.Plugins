@@ -70,7 +70,7 @@ public sealed class KuroSignService(
                     post => client.GetPostDetailAsync(credential, post.PostId, cancellationToken),
                     account,
                     cancellationToken);
-                lines.Add($"浏览帖子结果：成功 {success} 次，失败 {failed} 次");
+                lines.Add($"浏览帖子结果：成功 {success}/{success + failed}");
             }
         }
 
@@ -93,7 +93,7 @@ public sealed class KuroSignService(
                     cancellationToken,
                     delayMinMs: 2000,
                     delayMaxMs: 5000);
-                lines.Add($"点赞帖子结果：成功 {success} 次，失败 {failed} 次");
+                lines.Add($"点赞帖子结果：成功 {success}/{success + failed}");
             }
         }
 
