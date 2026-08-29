@@ -1,6 +1,7 @@
 {
   "ImageConverter": {
     "FfmpegPath": "ffmpeg",
+    "FfprobePath": "ffprobe",
     "TimeoutSeconds": 30
   }
 }

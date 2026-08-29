@@ -8,8 +8,8 @@ namespace OhMyBot.Plugins.ImageConverter;
 [OhMyBotPlugin(
     PluginId,
     "ImageConverter",
-    "1.0.0",
-    CoreApi = "[1.0.0,2.0.0)",
+    "1.0.10",
+    CoreApi = "[1.1.0,2.0.0)",
     LoadPriority = 100,
     SupportedPlatforms = PluginSupportedPlatforms.Telegram)]
 public sealed class ImageConverterPlugin : CommandPlugin
@@ -20,8 +20,7 @@ public sealed class ImageConverterPlugin : CommandPlugin
     {
         services.TryAddSingleton(typeof(ILogger<>), typeof(Logger<>));
         services.AddOptions<ImageConverterOptions>().BindConfiguration("ImageConverter");
-        services.AddSingleton<OpenCvImageConverter>();
-        services.AddSingleton<FfmpegStickerConverter>();
+        services.AddSingleton<FfmpegMediaConverter>();
     }
 
     protected override void ConfigureCommanding(ICommandPluginBuilder builder)
