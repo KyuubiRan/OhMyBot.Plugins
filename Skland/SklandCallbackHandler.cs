@@ -140,7 +140,8 @@ public sealed class SklandCallbackHandler(
                 account,
                 roleIds,
                 includeMissingConfigMessage: true,
-                cancellationToken: cancellationToken));
+                cancellationToken: cancellationToken,
+                progress: context.Progress));
         response.AsTelegramEdit(editMessageId);
         return response;
     }
@@ -193,7 +194,8 @@ public sealed class SklandCallbackHandler(
                 var result = await signService.ExecuteGameSignAsync(
                     account,
                     includeMissingConfigMessage: true,
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken,
+                    progress: context.Progress);
                 results.Add((account, result.Lines));
             }
             catch (Exception exception)

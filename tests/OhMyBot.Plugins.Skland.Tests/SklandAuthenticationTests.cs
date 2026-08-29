@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using OhMyBot.Core.Commanding.Commands;
 using OhMyBot.Core.Infrastructure.Data.Entities;
 using OhMyBot.Core.Infrastructure.Security;
 using OhMyBot.Core.Integrations.Skland;
@@ -26,14 +27,16 @@ public sealed class SklandAuthenticationTests
         var handler = new SklandApiHandler(rejectFirstDevice: true);
         var devices = new QueuedDeviceIdProvider(DeviceA, DeviceB);
         var service = CreateAccountService(dbContext, handler, devices);
+        var progress = new RecordingProgressReporter();
 
-        var result = await service.BindAsync(7, "hg-token");
+        var result = await service.BindAsync(7, "hg-token", progress: progress);
 
         Assert.AreEqual(DeviceB, result.Account.DeviceId);
         Assert.AreEqual("Skland User", result.Account.DisplayName);
         Assert.AreEqual(2, devices.CallCount);
         Assert.AreEqual(2, handler.GrantCount);
         Assert.AreEqual(2, handler.GenerateCredCount);
+        CollectionAssert.AreEqual(new[] { "请稍后..." }, progress.Messages.ToArray());
         CollectionAssert.AreEqual(new[] { DeviceA, DeviceB }, handler.GenerateCredDeviceIds.ToArray());
         Assert.IsTrue(handler.GenerateCredTimestamps.All(IsCurrentUnixTimestamp));
         Assert.IsTrue(handler.GenerateCredUserAgents.All(userAgent => userAgent == WebUserAgent));
@@ -167,6 +170,19 @@ public sealed class SklandAuthenticationTests
         {
             CallCount++;
             return Task.FromResult(_deviceIds.Dequeue());
+        }
+    }
+
+    private sealed class RecordingProgressReporter : ICommandProgressReporter
+    {
+        public List<string> Messages { get; } = [];
+
+        public bool HasReported => Messages.Count > 0;
+
+        public Task ReportAsync(string message, CancellationToken cancellationToken = default)
+        {
+            Messages.Add(message);
+            return Task.CompletedTask;
         }
     }
 

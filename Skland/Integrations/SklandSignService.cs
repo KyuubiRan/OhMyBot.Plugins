@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using OhMyBot.Core.Commanding.Commands;
 using OhMyBot.Core.Infrastructure.Data.Entities;
 
 namespace OhMyBot.Core.Integrations.Skland;
@@ -28,9 +29,10 @@ public sealed class SklandSignService(
         IEnumerable<long>? requestedRoleIds = null,
         bool onlyEnabledAutoSign = false,
         bool includeMissingConfigMessage = false,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ICommandProgressReporter? progress = null)
     {
-        var (signToken, cred) = await accountService.GetValidTokensAsync(account, cancellationToken);
+        var (signToken, cred) = await accountService.GetValidTokensAsync(account, cancellationToken, progress);
         var lines = new List<string>();
         var targets = ResolveRoleTargets(account, requestedRoleIds, onlyEnabledAutoSign, includeMissingConfigMessage, lines).ToArray();
 
@@ -41,7 +43,8 @@ public sealed class SklandSignService(
             var resultStart = lines.Count;
             try
             {
-                (signToken, cred) = await ProcessRoleAsync(role, account, signToken, cred, lines, cancellationToken);
+                (signToken, cred) = await ProcessRoleAsync(
+                    role, account, signToken, cred, lines, cancellationToken, progress);
             }
             catch (SklandCredExpiredException)
             {
@@ -53,9 +56,10 @@ public sealed class SklandSignService(
                 TruncateTo(lines, resultStart);
                 try
                 {
-                    await accountService.RefreshSignTokenAsync(account, cancellationToken);
-                    (signToken, cred) = await accountService.GetValidTokensAsync(account, cancellationToken);
-                    (signToken, cred) = await ProcessRoleAsync(role, account, signToken, cred, lines, cancellationToken);
+                    await accountService.RefreshSignTokenAsync(account, cancellationToken, progress);
+                    (signToken, cred) = await accountService.GetValidTokensAsync(account, cancellationToken, progress);
+                    (signToken, cred) = await ProcessRoleAsync(
+                        role, account, signToken, cred, lines, cancellationToken, progress);
                 }
                 catch (SklandCredExpiredException)
                 {
@@ -96,15 +100,18 @@ public sealed class SklandSignService(
         string signToken,
         string cred,
         List<string> lines,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ICommandProgressReporter? progress)
     {
         if (role.GameId == SklandGameNames.Arknights)
         {
-            (signToken, cred) = await ProcessArknightsRoleAsync(role, account, signToken, cred, lines, cancellationToken);
+            (signToken, cred) = await ProcessArknightsRoleAsync(
+                role, account, signToken, cred, lines, cancellationToken, progress);
         }
         else if (role.GameId == SklandGameNames.Endfield)
         {
-            (signToken, cred) = await ProcessEndfieldRoleAsync(role, account, signToken, cred, lines, cancellationToken);
+            (signToken, cred) = await ProcessEndfieldRoleAsync(
+                role, account, signToken, cred, lines, cancellationToken, progress);
         }
         else
         {
@@ -120,11 +127,13 @@ public sealed class SklandSignService(
         string signToken,
         string cred,
         List<string> lines,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ICommandProgressReporter? progress)
     {
         // 查签到状态
         var statusResult = await client.GetArknightsAttendanceAsync(role.Uid, signToken, cred, account.DeviceId, cancellationToken);
-        (signToken, cred) = await HandleTokenRefreshAsync(statusResult, account, signToken, cred, cancellationToken);
+        (signToken, cred) = await HandleTokenRefreshAsync(
+            statusResult, account, signToken, cred, cancellationToken, progress);
         if (!statusResult.IsOk)
         {
             // 重试一次（token 刷新后）
@@ -148,7 +157,8 @@ public sealed class SklandSignService(
         // 执行签到
         await DelayAsync(1000, 3000, cancellationToken);
         var signResult = await client.SignArknightsAsync(role.Uid, signToken, cred, account.DeviceId, cancellationToken);
-        (signToken, cred) = await HandleTokenRefreshAsync(signResult, account, signToken, cred, cancellationToken);
+        (signToken, cred) = await HandleTokenRefreshAsync(
+            signResult, account, signToken, cred, cancellationToken, progress);
 
         if (signResult.IsOk)
         {
@@ -180,7 +190,8 @@ public sealed class SklandSignService(
         string signToken,
         string cred,
         List<string> lines,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ICommandProgressReporter? progress)
     {
         if (string.IsNullOrEmpty(role.RoleId) || string.IsNullOrEmpty(role.ServerId))
         {
@@ -190,7 +201,8 @@ public sealed class SklandSignService(
 
         // 查签到状态
         var statusResult = await client.GetEndfieldAttendanceAsync(role.RoleId, role.ServerId, signToken, cred, account.DeviceId, cancellationToken);
-        (signToken, cred) = await HandleTokenRefreshAsync(statusResult, account, signToken, cred, cancellationToken);
+        (signToken, cred) = await HandleTokenRefreshAsync(
+            statusResult, account, signToken, cred, cancellationToken, progress);
         if (!statusResult.IsOk)
         {
             statusResult = await client.GetEndfieldAttendanceAsync(role.RoleId, role.ServerId, signToken, cred, account.DeviceId, cancellationToken);
@@ -212,7 +224,8 @@ public sealed class SklandSignService(
 
         await DelayAsync(1000, 3000, cancellationToken);
         var signResult = await client.SignEndfieldAsync(role.RoleId, role.ServerId, signToken, cred, account.DeviceId, cancellationToken);
-        (signToken, cred) = await HandleTokenRefreshAsync(signResult, account, signToken, cred, cancellationToken);
+        (signToken, cred) = await HandleTokenRefreshAsync(
+            signResult, account, signToken, cred, cancellationToken, progress);
 
         if (signResult.IsOk)
         {
@@ -249,7 +262,8 @@ public sealed class SklandSignService(
         SklandAccount account,
         string signToken,
         string cred,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ICommandProgressReporter? progress)
     {
         if (response.IsOk || response.Code is not (SklandHttpClient.TokenExpiredCode or SklandHttpClient.CredExpiredCode))
         {
@@ -263,7 +277,7 @@ public sealed class SklandSignService(
         }
 
         // Sign token 过期 — 刷新
-        var newToken = await accountService.RefreshSignTokenAsync(account, cancellationToken);
+        var newToken = await accountService.RefreshSignTokenAsync(account, cancellationToken, progress);
         return (newToken, cred);
     }
 

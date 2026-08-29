@@ -15,7 +15,8 @@ public sealed class PluginProjectTests
     {
         var metadata = typeof(SklandPlugin).GetCustomAttribute<OhMyBotPluginAttribute>();
         Assert.IsNotNull(metadata);
-        Assert.AreEqual("1.0.1", metadata.Version);
+        Assert.AreEqual("1.0.2", metadata.Version);
+        Assert.AreEqual("[1.1.0,2.0.0)", metadata.CoreApi);
         Assert.AreEqual(PluginSupportedPlatforms.All, metadata.SupportedPlatforms);
         var dependency = typeof(SklandPlugin).GetCustomAttribute<OhMyBotDependencyAttribute>();
         Assert.IsNotNull(dependency);

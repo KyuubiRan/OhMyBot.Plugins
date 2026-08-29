@@ -19,8 +19,8 @@ namespace OhMyBot.Plugins.Skland;
 [OhMyBotPlugin(
     "com.ohmybot.skland",
     "Skland",
-    "1.0.1",
-    CoreApi = "[1.0.0,2.0.0)",
+    "1.0.2",
+    CoreApi = "[1.1.0,2.0.0)",
     LoadPriority = 100,
     SupportedPlatforms = PluginSupportedPlatforms.All)]
 [OhMyBotDependency(PlaywrightProviderPlugin.PluginId, "[1.0.0,2.0.0)")]

@@ -86,7 +86,11 @@ public sealed class SklandCommandDslProvider(IServiceScopeFactory scopeFactory) 
         var subscriptionService = scope.ServiceProvider.GetRequiredService<INotificationSubscriptionService>();
 
         var token = context.Request.Args[0];
-        var result = await service.BindAsync(context.Identity.CoreUserId, token, context.CancellationToken);
+        var result = await service.BindAsync(
+            context.Identity.CoreUserId,
+            token,
+            context.CancellationToken,
+            context.Progress);
         await subscriptionService.EnableAsync(
             context.Identity.CoreUserId,
             context.Request.Platform,
@@ -189,7 +193,12 @@ public sealed class SklandCommandDslProvider(IServiceScopeFactory scopeFactory) 
             return CommandResponses.Error("SklandRoleMissing", "未找到对应游戏角色，请先使用 /skland game init 同步", context);
         }
 
-        var signResult = await signService.ExecuteGameSignAsync(account, roleIds, includeMissingConfigMessage: true, cancellationToken: context.CancellationToken);
+        var signResult = await signService.ExecuteGameSignAsync(
+            account,
+            roleIds,
+            includeMissingConfigMessage: true,
+            cancellationToken: context.CancellationToken,
+            progress: context.Progress);
         return builder.BuildGameSignResult(context, signResult);
     }
 

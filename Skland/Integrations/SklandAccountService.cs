@@ -19,7 +19,8 @@ public sealed class SklandAccountService(
     public async Task<SklandBindResult> BindAsync(
         long coreUserId,
         string hgToken,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ICommandProgressReporter? progress = null)
     {
         hgToken = hgToken.Trim();
         if (string.IsNullOrWhiteSpace(hgToken))
@@ -30,7 +31,8 @@ public sealed class SklandAccountService(
         var (cred, signToken, sklandUserId, deviceId) = await AuthenticateWithDeviceRecoveryAsync(
             hgToken,
             deviceId: null,
-            cancellationToken);
+            cancellationToken,
+            progress);
 
         // 获取绑定角色列表
         var binding = await client.GetBindingAsync(signToken, cred, deviceId, cancellationToken);
@@ -310,7 +312,8 @@ public sealed class SklandAccountService(
     /// </summary>
     public async Task<(string SignToken, string Cred)> GetValidTokensAsync(
         SklandAccount account,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ICommandProgressReporter? progress = null)
     {
         if (string.IsNullOrEmpty(account.CredCiphertext))
         {
@@ -325,14 +328,17 @@ public sealed class SklandAccountService(
         if (string.IsNullOrEmpty(signToken))
         {
             // sign token 已清空，刷新之
-            signToken = await RefreshSignTokenInternalAsync(account, cred, cancellationToken);
+            signToken = await RefreshSignTokenInternalAsync(account, cred, cancellationToken, progress);
         }
 
         return (signToken, cred);
     }
 
     /// <summary>刷新 sign token 并持久化，返回新 sign token。</summary>
-    public async Task<string> RefreshSignTokenAsync(SklandAccount account, CancellationToken cancellationToken = default)
+    public async Task<string> RefreshSignTokenAsync(
+        SklandAccount account,
+        CancellationToken cancellationToken = default,
+        ICommandProgressReporter? progress = null)
     {
         if (string.IsNullOrEmpty(account.CredCiphertext))
         {
@@ -340,13 +346,14 @@ public sealed class SklandAccountService(
         }
 
         var cred = secretProtector.Unprotect(account.CredCiphertext);
-        return await RefreshSignTokenInternalAsync(account, cred, cancellationToken);
+        return await RefreshSignTokenInternalAsync(account, cred, cancellationToken, progress);
     }
 
     private async Task<string> RefreshSignTokenInternalAsync(
         SklandAccount account,
         string cred,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ICommandProgressReporter? progress)
     {
         // 需要一个当前 sign token 才能调用 refresh；若完全没有，重新走 HG 认证
         var currentSignToken = string.IsNullOrEmpty(account.SignTokenCiphertext)
@@ -380,7 +387,8 @@ public sealed class SklandAccountService(
         var authentication = await AuthenticateWithDeviceRecoveryAsync(
             hgToken,
             account.DeviceId,
-            cancellationToken);
+            cancellationToken,
+            progress);
         await PersistAuthenticationAsync(account, authentication, cancellationToken);
         return authentication.SignToken;
     }
@@ -426,11 +434,12 @@ public sealed class SklandAccountService(
     private async Task<SklandAuthentication> AuthenticateWithDeviceRecoveryAsync(
         string hgToken,
         string? deviceId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ICommandProgressReporter? progress)
     {
         var candidate = SklandDeviceId.IsOfficial(deviceId)
             ? deviceId!
-            : await deviceIdProvider.GetDeviceIdAsync(cancellationToken);
+            : await GetDeviceIdAsync(progress, cancellationToken);
 
         try
         {
@@ -439,10 +448,22 @@ public sealed class SklandAccountService(
         }
         catch (SklandDeviceInvalidException)
         {
-            var replacement = await deviceIdProvider.GetDeviceIdAsync(cancellationToken);
+            var replacement = await GetDeviceIdAsync(progress, cancellationToken);
             var retry = await AuthenticateAsync(hgToken, replacement, cancellationToken);
             return new SklandAuthentication(retry.Cred, retry.SignToken, retry.SklandUserId, replacement);
         }
+    }
+
+    private async Task<string> GetDeviceIdAsync(
+        ICommandProgressReporter? progress,
+        CancellationToken cancellationToken)
+    {
+        if (progress is { HasReported: false })
+        {
+            await progress.ReportAsync("请稍后...", cancellationToken);
+        }
+
+        return await deviceIdProvider.GetDeviceIdAsync(cancellationToken);
     }
 
     /// <summary>从 HG token 走完两步认证，返回 (cred, signToken, sklandUserId)。</summary>
