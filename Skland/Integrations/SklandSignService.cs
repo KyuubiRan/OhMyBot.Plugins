@@ -1,13 +1,15 @@
 using Microsoft.Extensions.Logging;
 using OhMyBot.Core.Commanding.Commands;
 using OhMyBot.Core.Infrastructure.Data.Entities;
+using OhMyBot.Plugin.Commanding.SignIn;
 
 namespace OhMyBot.Core.Integrations.Skland;
 
 public sealed class SklandSignService(
     SklandHttpClient client,
     SklandAccountService accountService,
-    ILogger<SklandSignService> logger)
+    ILogger<SklandSignService> logger,
+    SignInExecutor signInExecutor)
 {
     // ---- Public API ----
 
@@ -32,113 +34,72 @@ public sealed class SklandSignService(
         CancellationToken cancellationToken = default,
         ICommandProgressReporter? progress = null)
     {
-        var (signToken, cred) = await accountService.GetValidTokensAsync(account, cancellationToken, progress);
         var lines = new List<string>();
         var targets = ResolveRoleTargets(account, requestedRoleIds, onlyEnabledAutoSign, includeMissingConfigMessage, lines).ToArray();
 
         foreach (var role in targets)
         {
-            // 角色标题行由外层统一写入；结果/失败行追加其后，重试时截断到此处即可。
+            cancellationToken.ThrowIfCancellationRequested();
             lines.Add($"[{role.GameName}] {role.NickName}（{role.Uid}）");
-            var resultStart = lines.Count;
-            try
-            {
-                (signToken, cred) = await ProcessRoleAsync(
-                    role, account, signToken, cred, lines, cancellationToken, progress);
-            }
-            catch (SklandCredExpiredException)
-            {
-                throw;
-            }
-            catch (SklandUnauthorizedException)
-            {
-                // sign/cred 失效（HTTP 401）：刷新令牌后整角色重试一次。
-                TruncateTo(lines, resultStart);
-                try
-                {
-                    await accountService.RefreshSignTokenAsync(account, cancellationToken, progress);
-                    (signToken, cred) = await accountService.GetValidTokensAsync(account, cancellationToken, progress);
-                    (signToken, cred) = await ProcessRoleAsync(
-                        role, account, signToken, cred, lines, cancellationToken, progress);
-                }
-                catch (SklandCredExpiredException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Skland sign retry failed for account {AccountId} role {RoleId}.", account.Id, role.Id);
-                    TruncateTo(lines, resultStart);
-                    lines.Add("签到失败：" + ex.GetBaseException().Message);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Skland sign failed for account {AccountId} role {RoleId}.", account.Id, role.Id);
-                TruncateTo(lines, resultStart);
-                lines.Add("签到失败：" + ex.GetBaseException().Message);
-            }
+            var moduleLines = await signInExecutor.RunModuleAsync(
+                $"{role.GameName}签到",
+                token => signInExecutor.ExecuteWithRetryAsync(
+                    $"Skland account {account.Id} role {role.Id}",
+                    attemptToken => ProcessRoleAsync(role, account, attemptToken, progress),
+                    token),
+                cancellationToken);
+            lines.AddRange(moduleLines);
         }
 
         return new SklandGameSignResult(account, lines);
     }
 
-    private static void TruncateTo(List<string> lines, int count)
-    {
-        if (lines.Count > count)
-        {
-            lines.RemoveRange(count, lines.Count - count);
-        }
-    }
-
     // ---- Role processing ----
 
-    /// <summary>返回处理后的 sign token（可能因 refresh 而更新）。</summary>
-    private async Task<(string SignToken, string Cred)> ProcessRoleAsync(
+    /// <summary>每次尝试从签到状态开始，POST 丢失响应时先确认是否已完成。</summary>
+    private async Task<IReadOnlyList<string>> ProcessRoleAsync(
         SklandGameRole role,
         SklandAccount account,
-        string signToken,
-        string cred,
-        List<string> lines,
         CancellationToken cancellationToken,
         ICommandProgressReporter? progress)
     {
-        if (role.GameId == SklandGameNames.Arknights)
+        var lines = new List<string>();
+        try
         {
-            (signToken, cred) = await ProcessArknightsRoleAsync(
-                role, account, signToken, cred, lines, cancellationToken, progress);
+            if (role.GameId == SklandGameNames.Arknights)
+            {
+                await ProcessArknightsRoleAsync(role, account, lines, cancellationToken, progress);
+            }
+            else if (role.GameId == SklandGameNames.Endfield)
+            {
+                await ProcessEndfieldRoleAsync(role, account, lines, cancellationToken, progress);
+            }
+            else
+            {
+                lines.Add("不支持的游戏 ID：" + role.GameId);
+            }
         }
-        else if (role.GameId == SklandGameNames.Endfield)
+        catch (SklandCredExpiredException exception)
         {
-            (signToken, cred) = await ProcessEndfieldRoleAsync(
-                role, account, signToken, cred, lines, cancellationToken, progress);
-        }
-        else
-        {
-            lines.Add("不支持的游戏 ID：" + role.GameId);
+            throw new CommandUserException("SklandCredExpired", exception.Message);
         }
 
-        return (signToken, cred);
+        return lines;
     }
 
-    private async Task<(string SignToken, string Cred)> ProcessArknightsRoleAsync(
+    private async Task ProcessArknightsRoleAsync(
         SklandGameRole role,
         SklandAccount account,
-        string signToken,
-        string cred,
         List<string> lines,
         CancellationToken cancellationToken,
         ICommandProgressReporter? progress)
     {
         // 查签到状态
-        var statusResult = await client.GetArknightsAttendanceAsync(role.Uid, signToken, cred, account.DeviceId, cancellationToken);
-        (signToken, cred) = await HandleTokenRefreshAsync(
-            statusResult, account, signToken, cred, cancellationToken, progress);
-        if (!statusResult.IsOk)
-        {
-            // 重试一次（token 刷新后）
-            statusResult = await client.GetArknightsAttendanceAsync(role.Uid, signToken, cred, account.DeviceId, cancellationToken);
-        }
+        var statusResult = await RequestWithTokenRecoveryAsync(
+            account,
+            (signToken, cred, token) => client.GetArknightsAttendanceAsync(role.Uid, signToken, cred, account.DeviceId, token),
+            cancellationToken,
+            progress);
 
         ThrowIfApiFailed(statusResult, "获取签到状态失败");
 
@@ -151,44 +112,32 @@ public sealed class SklandSignService(
                 lines.Add("今日奖励：" + todayAward);
             }
 
-            return (signToken, cred);
+            return;
         }
 
         // 执行签到
         await DelayAsync(1000, 3000, cancellationToken);
-        var signResult = await client.SignArknightsAsync(role.Uid, signToken, cred, account.DeviceId, cancellationToken);
-        (signToken, cred) = await HandleTokenRefreshAsync(
-            signResult, account, signToken, cred, cancellationToken, progress);
-
-        if (signResult.IsOk)
+        var signResult = await RequestWithTokenRecoveryAsync(
+            account,
+            (signToken, cred, token) => client.SignArknightsAsync(role.Uid, signToken, cred, account.DeviceId, token),
+            cancellationToken,
+            progress);
+        ThrowIfApiFailed(signResult, "明日方舟签到失败");
+        lines.Add("签到结果：成功");
+        var awards = FormatArknightsAwards(signResult.Data?.Awards);
+        if (!string.IsNullOrEmpty(awards))
         {
-            lines.Add("签到结果：成功");
-            var awards = FormatArknightsAwards(signResult.Data?.Awards);
-            if (!string.IsNullOrEmpty(awards))
-            {
-                lines.Add("今日奖励：" + awards);
-            }
-
-            logger.LogInformation(
-                "Skland Arknights sign finished for account {AccountId}, uid={Uid}.",
-                account.Id, role.Uid);
-        }
-        else
-        {
-            lines.Add("签到结果：失败 — " + signResult.Message);
-            logger.LogWarning(
-                "Skland Arknights sign failed for account {AccountId}, uid={Uid}, code={Code}, msg={Msg}.",
-                account.Id, role.Uid, signResult.Code, signResult.Message);
+            lines.Add("今日奖励：" + awards);
         }
 
-        return (signToken, cred);
+        logger.LogInformation(
+            "Skland Arknights sign finished for account {AccountId}, uid={Uid}.",
+            account.Id, role.Uid);
     }
 
-    private async Task<(string SignToken, string Cred)> ProcessEndfieldRoleAsync(
+    private async Task ProcessEndfieldRoleAsync(
         SklandGameRole role,
         SklandAccount account,
-        string signToken,
-        string cred,
         List<string> lines,
         CancellationToken cancellationToken,
         ICommandProgressReporter? progress)
@@ -196,17 +145,15 @@ public sealed class SklandSignService(
         if (string.IsNullOrEmpty(role.RoleId) || string.IsNullOrEmpty(role.ServerId))
         {
             lines.Add("跳过：终末地角色缺少 roleId/serverId，请使用 /skland game init 同步角色");
-            return (signToken, cred);
+            return;
         }
 
         // 查签到状态
-        var statusResult = await client.GetEndfieldAttendanceAsync(role.RoleId, role.ServerId, signToken, cred, account.DeviceId, cancellationToken);
-        (signToken, cred) = await HandleTokenRefreshAsync(
-            statusResult, account, signToken, cred, cancellationToken, progress);
-        if (!statusResult.IsOk)
-        {
-            statusResult = await client.GetEndfieldAttendanceAsync(role.RoleId, role.ServerId, signToken, cred, account.DeviceId, cancellationToken);
-        }
+        var statusResult = await RequestWithTokenRecoveryAsync(
+            account,
+            (signToken, cred, token) => client.GetEndfieldAttendanceAsync(role.RoleId, role.ServerId, signToken, cred, account.DeviceId, token),
+            cancellationToken,
+            progress);
 
         ThrowIfApiFailed(statusResult, "获取终末地签到状态失败");
 
@@ -219,66 +166,78 @@ public sealed class SklandSignService(
                 lines.Add("今日奖励：" + award);
             }
 
-            return (signToken, cred);
+            return;
         }
 
         await DelayAsync(1000, 3000, cancellationToken);
-        var signResult = await client.SignEndfieldAsync(role.RoleId, role.ServerId, signToken, cred, account.DeviceId, cancellationToken);
-        (signToken, cred) = await HandleTokenRefreshAsync(
-            signResult, account, signToken, cred, cancellationToken, progress);
-
-        if (signResult.IsOk)
+        var signResult = await RequestWithTokenRecoveryAsync(
+            account,
+            (signToken, cred, token) => client.SignEndfieldAsync(role.RoleId, role.ServerId, signToken, cred, account.DeviceId, token),
+            cancellationToken,
+            progress);
+        ThrowIfApiFailed(signResult, "终末地签到失败");
+        lines.Add("签到结果：成功");
+        var signAward = FormatEndfieldSignAwards(signResult.Data);
+        if (!string.IsNullOrEmpty(signAward))
         {
-            lines.Add("签到结果：成功");
-            var award = FormatEndfieldSignAwards(signResult.Data);
-            if (!string.IsNullOrEmpty(award))
-            {
-                lines.Add("今日奖励：" + award);
-            }
-
-            logger.LogInformation(
-                "Skland Endfield sign finished for account {AccountId}, roleId={RoleId}.",
-                account.Id, role.RoleId);
-        }
-        else
-        {
-            lines.Add("签到结果：失败 — " + signResult.Message);
-            logger.LogWarning(
-                "Skland Endfield sign failed for account {AccountId}, roleId={RoleId}, code={Code}, msg={Msg}.",
-                account.Id, role.RoleId, signResult.Code, signResult.Message);
+            lines.Add("今日奖励：" + signAward);
         }
 
-        return (signToken, cred);
+        logger.LogInformation(
+            "Skland Endfield sign finished for account {AccountId}, roleId={RoleId}.",
+            account.Id, role.RoleId);
     }
 
     // ---- Token expiry handling ----
 
     /// <summary>
-    /// 检查响应是否因 token 过期而失败；若是则刷新并返回新 token/cred。
-    /// 调用方应在刷新后重试原始请求。
+    /// 认证失效时刷新一次后重发；凭据可能同时更新，始终重新读取 token 和 cred。
     /// </summary>
-    private async Task<(string SignToken, string Cred)> HandleTokenRefreshAsync(
-        SklandBaseResponse response,
+    private async Task<SklandApiResponse<T>> RequestWithTokenRecoveryAsync<T>(
         SklandAccount account,
-        string signToken,
-        string cred,
+        Func<string, string, CancellationToken, Task<SklandApiResponse<T>>> request,
         CancellationToken cancellationToken,
         ICommandProgressReporter? progress)
     {
-        if (response.IsOk || response.Code is not (SklandHttpClient.TokenExpiredCode or SklandHttpClient.CredExpiredCode))
+        for (var authenticationAttempt = 0; ; authenticationAttempt++)
         {
-            return (signToken, cred);
-        }
+            var (signToken, cred) = await accountService.GetValidTokensAsync(account, cancellationToken, progress);
+            SklandApiResponse<T> response;
+            try
+            {
+                response = await request(signToken, cred, cancellationToken);
+            }
+            catch (SklandUnauthorizedException) when (authenticationAttempt == 0)
+            {
+                await accountService.RefreshSignTokenAsync(account, cancellationToken, progress);
+                continue;
+            }
+            catch (SklandUnauthorizedException)
+            {
+                throw new CommandUserException("SklandAuthenticationFailed", "森空岛身份验证失败，请重新绑定账号。");
+            }
 
-        if (response.Code == SklandHttpClient.CredExpiredCode)
-        {
-            await accountService.ClearCredAsync(account.Id, cancellationToken);
-            throw new SklandCredExpiredException(account.Id);
-        }
+            if (response.Code == SklandHttpClient.CredExpiredCode)
+            {
+                await accountService.ClearCredAsync(account.Id, cancellationToken);
+                account.CredCiphertext = string.Empty;
+                account.SignTokenCiphertext = string.Empty;
+                throw new SklandCredExpiredException(account.Id);
+            }
 
-        // Sign token 过期 — 刷新
-        var newToken = await accountService.RefreshSignTokenAsync(account, cancellationToken, progress);
-        return (newToken, cred);
+            if (response.Code == SklandHttpClient.TokenExpiredCode)
+            {
+                if (authenticationAttempt > 0)
+                {
+                    throw new CommandUserException("SklandAuthenticationFailed", "森空岛身份验证失效，请重新绑定账号。");
+                }
+
+                await accountService.RefreshSignTokenAsync(account, cancellationToken, progress);
+                continue;
+            }
+
+            return response;
+        }
     }
 
     // ---- Role target resolution ----
@@ -390,14 +349,21 @@ public sealed class SklandSignService(
         return string.Join("、", data.ResourceInfoMap.Values.Select(r => $"{r.Name} x{r.Count}"));
     }
 
-    private static void ThrowIfApiFailed(SklandBaseResponse response, string prefix)
+    private void ThrowIfApiFailed(SklandBaseResponse response, string prefix)
     {
         if (response.IsOk)
         {
             return;
         }
 
-        throw new InvalidOperationException($"{prefix}：code={response.Code}, msg={response.Message}");
+        logger.LogWarning("Skland sign API failed: operation={Operation}, code={Code}, message={Message}.",
+            prefix, response.Code, response.Message);
+        if (response.Code is SklandHttpClient.TokenExpiredCode or SklandHttpClient.DeviceInvalidCode)
+        {
+            throw new CommandUserException("SklandAuthenticationFailed", "森空岛身份或设备验证失败，请重新绑定账号。");
+        }
+
+        throw new SignInTransientException($"{prefix}（接口错误 {response.Code}）");
     }
 
     private static Task DelayAsync(int minMs, int maxMs, CancellationToken cancellationToken)

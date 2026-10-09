@@ -11,6 +11,7 @@ using OhMyBot.Core.Infrastructure.Security;
 using OhMyBot.Core.Integrations.Kuro;
 using OhMyBot.Plugin.Abstractions;
 using OhMyBot.Plugin.Commanding;
+using OhMyBot.Plugin.Commanding.SignIn;
 
 namespace OhMyBot.Plugins.Kuro;
 
@@ -55,6 +56,9 @@ public sealed class KuroPlugin : CommandPlugin
         services.AddPluginEfBaseline<KuroDbContext>(new EfBaselineOptions(
             "com.ohmybot.kuro", "KuroAccounts"));
         services.AddScoped<KuroAccountService>();
+        services.AddScoped<SignInExecutor>();
+        services.AddScoped<KuroCommunitySignModule>();
+        services.AddScoped<KuroGameSignModule>();
         services.AddScoped<KuroSignService>();
         services.AddScoped<KuroResponseBuilder>();
 

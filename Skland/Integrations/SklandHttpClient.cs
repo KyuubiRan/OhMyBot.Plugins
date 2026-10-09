@@ -309,7 +309,9 @@ public sealed class SklandHttpClient(HttpClient httpClient, IOptions<SklandOptio
             }
 
             throw new HttpRequestException(
-                $"森空岛请求失败：HTTP {(int)response.StatusCode} {response.ReasonPhrase}。响应：{snippet}");
+                $"森空岛请求失败：HTTP {(int)response.StatusCode} {response.ReasonPhrase}。响应：{snippet}",
+                inner: null,
+                statusCode: response.StatusCode);
         }
 
         var result = JsonSerializer.Deserialize<T>(raw, JsonOptions)

@@ -12,6 +12,7 @@ using OhMyBot.Core.Infrastructure.Security;
 using OhMyBot.Core.Integrations.Skland;
 using OhMyBot.Plugin.Abstractions;
 using OhMyBot.Plugin.Commanding;
+using OhMyBot.Plugin.Commanding.SignIn;
 using OhMyBot.Plugins.PlaywrightProvider;
 
 namespace OhMyBot.Plugins.Skland;
@@ -72,6 +73,7 @@ public sealed class SklandPlugin : CommandPlugin
         services.AddPlaywrightProviderClient();
         services.AddSingleton<ISklandDeviceIdProvider, PlaywrightSklandDeviceIdProvider>();
         services.AddScoped<SklandAccountService>();
+        services.AddScoped<SignInExecutor>();
         services.AddScoped<SklandSignService>();
         services.AddScoped<SklandResponseBuilder>();
     }

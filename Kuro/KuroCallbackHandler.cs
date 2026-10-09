@@ -5,6 +5,7 @@ using OhMyBot.Core.Commanding.Presentation;
 using OhMyBot.Core.Infrastructure.Data.Entities;
 using OhMyBot.Core.Infrastructure.Identity;
 using OhMyBot.Core.Integrations.Kuro;
+using OhMyBot.Plugin.Commanding.SignIn;
 
 namespace OhMyBot.Plugins.Kuro;
 
@@ -131,9 +132,13 @@ public sealed class KuroCallbackHandler(
                     cancellationToken: cancellationToken);
                 results.Add((account, result.Lines));
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception exception)
             {
-                results.Add((account, ["签到失败：" + exception.GetBaseException().Message]));
+                results.Add((account, ["签到失败：" + SignInExecutor.DescribeFailure(exception)]));
             }
         }
 
@@ -287,9 +292,13 @@ public sealed class KuroCallbackHandler(
                     cancellationToken: cancellationToken);
                 results.Add((account, result.Lines));
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception exception)
             {
-                results.Add((account, ["签到失败：" + exception.GetBaseException().Message]));
+                results.Add((account, ["签到失败：" + SignInExecutor.DescribeFailure(exception)]));
             }
         }
 

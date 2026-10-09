@@ -3,10 +3,12 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging.Abstractions;
+using OhMyBot.Plugin.Commanding.SignIn;
 
 namespace OhMyBot.Core.Integrations.Kuro;
 
-public sealed class KuroHttpClient(HttpClient httpClient, IOptions<KuroOptions> options)
+public sealed class KuroHttpClient(HttpClient httpClient, IOptions<KuroOptions> options, SignInExecutor? executor = null)
 {
     public const int TokenExpiredCode = 220;
 
@@ -16,6 +18,7 @@ public sealed class KuroHttpClient(HttpClient httpClient, IOptions<KuroOptions> 
     };
 
     private readonly KuroOptions _options = options.Value;
+    private readonly SignInExecutor _executor = executor ?? new(NullLogger<SignInExecutor>.Instance);
 
     public Task<KuroApiResponse<KuroMineData>> GetMineAsync(string token, CancellationToken cancellationToken = default)
     {
@@ -207,7 +210,7 @@ public sealed class KuroHttpClient(HttpClient httpClient, IOptions<KuroOptions> 
         long userId,
         CancellationToken cancellationToken = default)
     {
-        return PostAsync<KuroGameSignInInitData>("/encourage/signIn/initSignInV2", credential, GameSignBody(gameId, serverId, roleId, userId, includeMonth: false), cancellationToken);
+        return PostAsync<KuroGameSignInInitData>("/encourage/signIn/initSignInV2", credential, GameSignBody(gameId, serverId, roleId, userId, includeMonth: false), cancellationToken, retry: false);
     }
 
     public Task<KuroApiResponse<KuroGameSignInResult>> GameSignInAsync(
@@ -229,7 +232,7 @@ public sealed class KuroHttpClient(HttpClient httpClient, IOptions<KuroOptions> 
         long userId,
         CancellationToken cancellationToken = default)
     {
-        return PostAsync<KuroGameSignInResult>("/encourage/signIn/v2", credential, GameSignBody(gameId, serverId, roleId, userId, includeMonth: true), cancellationToken);
+        return PostAsync<KuroGameSignInResult>("/encourage/signIn/v2", credential, GameSignBody(gameId, serverId, roleId, userId, includeMonth: true), cancellationToken, retry: false);
     }
 
     private static Dictionary<string, string> GameSignBody(long gameId, string serverId, long roleId, long userId, bool includeMonth)
@@ -249,36 +252,55 @@ public sealed class KuroHttpClient(HttpClient httpClient, IOptions<KuroOptions> 
         return body;
     }
 
-    private async Task<KuroApiResponse<T>> PostAsync<T>(
+    private Task<KuroApiResponse<T>> PostAsync<T>(
         string path,
         KuroRequestCredential credential,
         IReadOnlyDictionary<string, string> body,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool retry = true)
     {
-        using var request = CreateRequest(path, credential, body);
-        using var response = await httpClient.SendAsync(request, cancellationToken);
-        var raw = await response.Content.ReadAsStringAsync(cancellationToken);
-        response.EnsureSuccessStatusCode();
-        var result = JsonSerializer.Deserialize<KuroApiResponse<T>>(raw, JsonOptions)
-                     ?? throw new InvalidOperationException("库街区返回数据为空：" + raw);
-        result.Raw = raw;
-        return result;
+        return retry ? _executor.ExecuteWithRetryAsync(path, SendAsync, cancellationToken) : SendAsync(cancellationToken);
+
+        async Task<KuroApiResponse<T>> SendAsync(CancellationToken token)
+        {
+            using var request = CreateRequest(path, credential, body);
+            using var response = await httpClient.SendAsync(request, token);
+            response.EnsureSuccessStatusCode();
+            var raw = await response.Content.ReadAsStringAsync(token);
+            var result = JsonSerializer.Deserialize<KuroApiResponse<T>>(raw, JsonOptions)
+                         ?? throw new InvalidOperationException("库街区返回数据为空");
+            ThrowIfTransient(result);
+            result.Raw = raw;
+            return result;
+        }
     }
 
-    private async Task<KuroBaseResponse> PostBaseAsync(
+    private Task<KuroBaseResponse> PostBaseAsync(
         string path,
         KuroRequestCredential credential,
         IReadOnlyDictionary<string, string> body,
         CancellationToken cancellationToken)
     {
-        using var request = CreateRequest(path, credential, body);
-        using var response = await httpClient.SendAsync(request, cancellationToken);
-        var raw = await response.Content.ReadAsStringAsync(cancellationToken);
-        response.EnsureSuccessStatusCode();
-        var result = JsonSerializer.Deserialize<KuroBaseResponse>(raw, JsonOptions)
-                     ?? throw new InvalidOperationException("库街区返回数据为空：" + raw);
-        result.Raw = raw;
-        return result;
+        return _executor.ExecuteWithRetryAsync(path, async token =>
+        {
+            using var request = CreateRequest(path, credential, body);
+            using var response = await httpClient.SendAsync(request, token);
+            response.EnsureSuccessStatusCode();
+            var raw = await response.Content.ReadAsStringAsync(token);
+            var result = JsonSerializer.Deserialize<KuroBaseResponse>(raw, JsonOptions)
+                         ?? throw new InvalidOperationException("库街区返回数据为空");
+            ThrowIfTransient(result);
+            result.Raw = raw;
+            return result;
+        }, cancellationToken);
+    }
+
+    private static void ThrowIfTransient(KuroBaseResponse response)
+    {
+        if (!response.Success && response.Code >= 500)
+        {
+            throw new SignInTransientException("库街区接口暂时不可用，请稍后手动重试。");
+        }
     }
 
     private HttpRequestMessage CreateRequest(string path, KuroRequestCredential credential, IReadOnlyDictionary<string, string> body)

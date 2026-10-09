@@ -410,6 +410,20 @@ public sealed partial class MihoyoAccountService(
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>社区 stoken 失效时保留独立的游戏 Cookie。</summary>
+    public async Task ClearStokenAsync(long accountId, CancellationToken cancellationToken = default)
+    {
+        var account = await dbContext.MihoyoAccounts.FirstOrDefaultAsync(item => item.Id == accountId, cancellationToken);
+        if (account is null)
+        {
+            return;
+        }
+
+        account.StokenCiphertext = string.Empty;
+        account.UpdatedAt = timeProvider.GetUtcNow();
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
     /// <summary>刷新后的 cookie_token 写回数据库。</summary>
     public async Task UpdateCookieAsync(long accountId, string cookie, CancellationToken cancellationToken = default)
     {

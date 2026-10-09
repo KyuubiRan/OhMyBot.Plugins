@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using OhMyBot.Core.Commanding.Notifications;
 using OhMyBot.Core.Infrastructure.Messaging;
 using OhMyBot.Core.Integrations.Skland;
+using OhMyBot.Plugin.Commanding.SignIn;
 
 namespace OhMyBot.Core.Infrastructure.ScheduledTasks;
 
@@ -81,10 +82,10 @@ public sealed class SklandAutoSignManagedTask : ManagedTaskBase
         {
             result = await signService.ExecuteAutoSignAsync(account, cancellationToken);
         }
-        catch (Exception exception)
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(exception, "Failed to process Skland account {AccountId}.", account.Id);
-            var error = $"[森空岛-自动签到]\n账号：{account.DisplayName}\n自动签到执行失败：{exception.GetBaseException().Message}";
+            var error = $"[森空岛-自动签到]\n账号：{account.DisplayName}\n自动签到执行失败：{SignInExecutor.DescribeFailure(exception)}";
             await PublishAsync(publisher, deliveries, error, cancellationToken);
             return;
         }

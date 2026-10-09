@@ -3,6 +3,7 @@ using OhMyBot.Contracts.Grpc;
 using OhMyBot.Core.Integrations.Kuro;
 using OhMyBot.Core.Infrastructure.Messaging;
 using OhMyBot.Core.Commanding.Notifications;
+using OhMyBot.Plugin.Commanding.SignIn;
 
 namespace OhMyBot.Core.Infrastructure.ScheduledTasks;
 
@@ -85,11 +86,18 @@ public sealed class KuroAutoSignManagedTask : ManagedTaskBase
         {
             result = await signService.ExecuteAutoSignAsync(account, cancellationToken);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Failed to process Kuro account {AccountId}.", account.Id);
-            var error = $"[库街区-自动签到]\n账号：{account.DisplayName}\n自动签到执行失败：{exception.GetBaseException().Message}";
-            await PublishAsync(publisher, deliveries, error, cancellationToken);
+            var errorId = Guid.NewGuid().ToString("N")[..6];
+            _logger.LogWarning(exception,
+                "Failed to process Kuro account {AccountId}. errorId={ErrorId}.", account.Id, errorId);
+            var failure = new KuroAutoSignResult(account,
+                [$"自动签到执行失败：{SignInExecutor.DescribeFailure(exception)}（错误 id: {errorId}）"]);
+            await PublishAsync(publisher, deliveries, FormatNotification(failure, TimeProvider.GetUtcNow()), cancellationToken);
             return;
         }
 

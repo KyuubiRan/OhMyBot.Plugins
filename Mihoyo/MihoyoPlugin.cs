@@ -13,6 +13,7 @@ using OhMyBot.Core.Infrastructure.Security;
 using OhMyBot.Core.Integrations.Mihoyo;
 using OhMyBot.Plugin.Abstractions;
 using OhMyBot.Plugin.Commanding;
+using OhMyBot.Plugin.Commanding.SignIn;
 
 namespace OhMyBot.Plugins.Mihoyo;
 
@@ -77,6 +78,10 @@ public sealed class MihoyoPlugin : CommandPlugin
         services.AddPluginEfBaseline<MihoyoDbContext>(new EfBaselineOptions(
             "com.ohmybot.mihoyo", "MihoyoAccounts"));
         services.AddScoped<MihoyoAccountService>();
+        services.AddScoped<SignInExecutor>();
+        services.AddScoped<MihoyoSignCredentialService>();
+        services.AddScoped<MihoyoCommunitySignModule>();
+        services.AddScoped<MihoyoGameSignModule>();
         services.AddScoped<MihoyoSignService>();
         services.AddScoped<MihoyoResponseBuilder>();
         services.AddHttpClient<MihoyoHttpClient>((serviceProvider, client) =>

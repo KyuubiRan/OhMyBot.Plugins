@@ -3,6 +3,7 @@ using OhMyBot.Core.Commanding.Callbacks;
 using OhMyBot.Core.Commanding.Commands;
 using OhMyBot.Core.Infrastructure.Data.Entities;
 using OhMyBot.Core.Integrations.Mihoyo;
+using OhMyBot.Plugin.Commanding.SignIn;
 
 namespace OhMyBot.Plugins.Mihoyo;
 
@@ -137,9 +138,14 @@ public sealed class MihoyoCallbackHandler(
                     cancellationToken: cancellationToken);
                 results.Add((account, result.Lines));
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception exception)
             {
-                results.Add((account, ["签到失败：" + exception.GetBaseException().Message]));
+                logger.LogWarning(exception, "Mihoyo community sign failed for account {AccountId}.", account.Id);
+                results.Add((account, ["社区签到失败：" + SignInExecutor.DescribeFailure(exception)]));
             }
         }
 
@@ -293,9 +299,14 @@ public sealed class MihoyoCallbackHandler(
                     cancellationToken: cancellationToken);
                 results.Add((account, result.Lines));
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception exception)
             {
-                results.Add((account, ["签到失败：" + exception.GetBaseException().Message]));
+                logger.LogWarning(exception, "Mihoyo game sign failed for account {AccountId}.", account.Id);
+                results.Add((account, ["游戏签到失败：" + SignInExecutor.DescribeFailure(exception)]));
             }
         }
 

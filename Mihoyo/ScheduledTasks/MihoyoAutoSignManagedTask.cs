@@ -3,6 +3,7 @@ using OhMyBot.Contracts.Grpc;
 using OhMyBot.Core.Infrastructure.Messaging;
 using OhMyBot.Core.Integrations.Mihoyo;
 using OhMyBot.Core.Commanding.Notifications;
+using OhMyBot.Plugin.Commanding.SignIn;
 
 namespace OhMyBot.Core.Infrastructure.ScheduledTasks;
 
@@ -80,12 +81,16 @@ public sealed class MihoyoAutoSignManagedTask : ManagedTaskBase
         {
             result = await signService.ExecuteAutoSignAsync(account, cancellationToken);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Failed to process Mihoyo account {AccountId}.", account.Id);
-            var error = $"[米游社-自动签到]\n账号：{account.DisplayName}\n自动签到执行失败：{exception.GetBaseException().Message}";
-            await PublishAsync(publisher, deliveries, error, cancellationToken);
-            return;
+            var errorId = Guid.NewGuid().ToString("N")[..6];
+            _logger.LogWarning(exception, "Failed to process Mihoyo account {AccountId}; errorId={ErrorId}.", account.Id, errorId);
+            result = new MihoyoAutoSignResult(account,
+                [$"自动签到执行失败：{SignInExecutor.DescribeFailure(exception)}（错误 id: {errorId}）"]);
         }
 
         if (!result.HasResult)
