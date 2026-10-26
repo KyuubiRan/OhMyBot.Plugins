@@ -87,6 +87,7 @@ public sealed class MihoyoAutoSignManagedTask : ManagedTaskBase
         }
         catch (Exception exception)
         {
+            ReportFailure(exception, $"米游社账号 {account.Id}");
             var errorId = Guid.NewGuid().ToString("N")[..6];
             _logger.LogWarning(exception, "Failed to process Mihoyo account {AccountId}; errorId={ErrorId}.", account.Id, errorId);
             result = new MihoyoAutoSignResult(account,

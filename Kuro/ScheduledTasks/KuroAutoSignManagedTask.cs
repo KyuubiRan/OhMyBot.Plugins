@@ -92,6 +92,7 @@ public sealed class KuroAutoSignManagedTask : ManagedTaskBase
         }
         catch (Exception exception)
         {
+            ReportFailure(exception, $"库街区账号 {account.Id}");
             var errorId = Guid.NewGuid().ToString("N")[..6];
             _logger.LogWarning(exception,
                 "Failed to process Kuro account {AccountId}. errorId={ErrorId}.", account.Id, errorId);

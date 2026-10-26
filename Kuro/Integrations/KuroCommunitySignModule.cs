@@ -46,6 +46,9 @@ public sealed class KuroCommunitySignModule(
                     if (!signResult.Success)
                     {
                         lines.Add("原因：" + signResult.Msg);
+                        if (!signResult.Msg.Contains("重复签到", StringComparison.Ordinal))
+                            OhMyBot.Core.Infrastructure.ScheduledTasks.ManagedTaskExecutionContext.ReportFailure(
+                                $"库街区账号 {account.Id} 社区签到失败：{signResult.Msg}");
                     }
 
                     logger.Log(signResult.Success ? LogLevel.Information : LogLevel.Warning,
@@ -131,6 +134,8 @@ public sealed class KuroCommunitySignModule(
                     if (!shareResult.Success)
                     {
                         lines.Add("原因：" + shareResult.Msg);
+                        OhMyBot.Core.Infrastructure.ScheduledTasks.ManagedTaskExecutionContext.ReportFailure(
+                            $"库街区账号 {account.Id} 分享帖子失败：{shareResult.Msg}");
                     }
 
                     logger.Log(shareResult.Success ? LogLevel.Information : LogLevel.Warning,
@@ -192,6 +197,8 @@ public sealed class KuroCommunitySignModule(
                 else
                 {
                     failed++;
+                    OhMyBot.Core.Infrastructure.ScheduledTasks.ManagedTaskExecutionContext.ReportFailure(
+                        $"库街区账号 {account.Id} {name}失败：{result.Msg}");
                 }
 
                 return Array.Empty<string>();

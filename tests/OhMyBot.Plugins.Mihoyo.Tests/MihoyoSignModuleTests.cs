@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using OhMyBot.Core.Infrastructure.Data.Entities;
 using OhMyBot.Core.Infrastructure.Security;
+using OhMyBot.Core.Infrastructure.ScheduledTasks;
 using OhMyBot.Core.Integrations.Mihoyo;
 using OhMyBot.Plugin.Commanding.SignIn;
 using OhMyBot.Plugins.Mihoyo.Data;
@@ -13,6 +14,28 @@ namespace OhMyBot.Plugins.Mihoyo.Tests;
 [TestClass]
 public sealed class MihoyoSignModuleTests
 {
+    [TestMethod]
+    public async Task BusinessFailureWithoutExceptionStillMarksManagedTaskFailed()
+    {
+        await using var db = CreateDbContext();
+        var handler = new StubHandler(request => IsGameInfo(request)
+            ? Json("""{"retcode":-123,"message":"business-sign-failure"}""")
+            : DefaultResponse(request));
+        var service = CreateService(db, handler);
+        var task = new DiagnosticTask(async token => await service.ExecuteAutoSignAsync(CreateAccount(), token));
+        await task.ExecuteAsync();
+        Assert.AreEqual(ManagedTaskOutcome.Failed, task.Status.Outcome);
+        Assert.Contains("business-sign-failure", task.Status.LastErrorDetails!);
+        Assert.IsNotNull(task.Status.LastFinishedAt);
+    }
+
+    private sealed class DiagnosticTask(Func<CancellationToken, Task> run) : ManagedTaskBase(true, "10 0 * * *", TimeProvider.System)
+    {
+        public override string Name => "test-mihoyo";
+        public override string Description => "test";
+        protected override Task ExecuteCoreAsync(CancellationToken cancellationToken) => run(cancellationToken);
+    }
+
     [TestMethod]
     public async Task CommunityTimeoutExhaustsThreeRetriesButGameStillRuns()
     {

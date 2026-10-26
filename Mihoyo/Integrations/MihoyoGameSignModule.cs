@@ -84,12 +84,16 @@ public sealed class MihoyoGameSignModule(
         if (!info.Ok || info.Data is not { } infoData)
         {
             lines.Add("获取签到信息失败：" + info.Message);
+            OhMyBot.Core.Infrastructure.ScheduledTasks.ManagedTaskExecutionContext.ReportFailure(
+                $"米游社账号 {account.Id} 游戏 {game.Key} 获取签到信息失败：{info.Message}");
             return cookie;
         }
 
         if (infoData.FirstBind)
         {
             lines.Add("首次绑定米游社，请先手动签到一次");
+            OhMyBot.Core.Infrastructure.ScheduledTasks.ManagedTaskExecutionContext.ReportFailure(
+                $"米游社账号 {account.Id} 游戏 {game.Key} 首次绑定，需要手动签到一次。");
             return cookie;
         }
 
@@ -115,12 +119,16 @@ public sealed class MihoyoGameSignModule(
         if (sign.Ok && sign.Data is { Success: 1 })
         {
             lines.Add("签到结果：触发验证码，已跳过（不支持自动打码）");
+            OhMyBot.Core.Infrastructure.ScheduledTasks.ManagedTaskExecutionContext.ReportFailure(
+                $"米游社账号 {account.Id} 游戏 {game.Key} 触发验证码，自动签到未完成。");
             return cookie;
         }
 
         if (!sign.Ok)
         {
             lines.Add("签到结果：失败：" + sign.Message);
+            OhMyBot.Core.Infrastructure.ScheduledTasks.ManagedTaskExecutionContext.ReportFailure(
+                $"米游社账号 {account.Id} 游戏 {game.Key} 签到失败：{sign.Message}");
             return cookie;
         }
 
@@ -141,12 +149,16 @@ public sealed class MihoyoGameSignModule(
         if (!info.Ok || info.Data is not { } infoData)
         {
             lines.Add("获取签到信息失败：" + info.Message);
+            OhMyBot.Core.Infrastructure.ScheduledTasks.ManagedTaskExecutionContext.ReportFailure(
+                $"HoYoLAB 游戏 {game.Key} 获取签到信息失败：{info.Message}");
             return;
         }
 
         if (infoData.FirstBind)
         {
             lines.Add("首次绑定，请先在 HoYoLAB 手动签到一次");
+            OhMyBot.Core.Infrastructure.ScheduledTasks.ManagedTaskExecutionContext.ReportFailure(
+                $"HoYoLAB 游戏 {game.Key} 首次绑定，需要手动签到一次。");
             return;
         }
 
@@ -171,6 +183,8 @@ public sealed class MihoyoGameSignModule(
         if (!sign.Ok)
         {
             lines.Add("签到结果：失败：" + sign.Message);
+            OhMyBot.Core.Infrastructure.ScheduledTasks.ManagedTaskExecutionContext.ReportFailure(
+                $"HoYoLAB 游戏 {game.Key} 签到失败：{sign.Message}");
             return;
         }
 
@@ -188,6 +202,9 @@ public sealed class MihoyoGameSignModule(
         var failures = await executor.RunModuleAsync("游戏奖励查询", async token =>
         {
             var home = await getHome(token);
+            if (!home.Ok)
+                OhMyBot.Core.Infrastructure.ScheduledTasks.ManagedTaskExecutionContext.ReportFailure(
+                    $"米游社游戏奖励查询失败：{home.Message}");
             awards = home.Data?.Awards ?? [];
             return Array.Empty<string>();
         }, cancellationToken);

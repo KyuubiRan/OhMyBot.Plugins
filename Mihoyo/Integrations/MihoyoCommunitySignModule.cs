@@ -87,10 +87,15 @@ public sealed class MihoyoCommunitySignModule(
                     if (signResult.Retcode == 1034)
                     {
                         lines.Add("社区签到：触发验证码，已跳过（不支持自动打码）");
+                        OhMyBot.Core.Infrastructure.ScheduledTasks.ManagedTaskExecutionContext.ReportFailure(
+                            $"米游社账号 {account.Id} 社区签到触发验证码，需要用户处理。");
                     }
                     else
                     {
                         lines.Add($"社区签到：{(signResult.Ok ? "成功" : "失败：" + signResult.Message)}");
+                        if (!signResult.Ok)
+                            OhMyBot.Core.Infrastructure.ScheduledTasks.ManagedTaskExecutionContext.ReportFailure(
+                                $"米游社账号 {account.Id} 社区签到失败：{signResult.Message}");
                     }
 
                     await DelayAsync(2000, 4000, token);
@@ -124,6 +129,11 @@ public sealed class MihoyoCommunitySignModule(
                         if (result.Ok)
                         {
                             success++;
+                        }
+                        else
+                        {
+                            OhMyBot.Core.Infrastructure.ScheduledTasks.ManagedTaskExecutionContext.ReportFailure(
+                                $"米游社账号 {account.Id} 浏览帖子失败：{result.Message}");
                         }
 
                         await DelayAsync(2000, 4000, token);
@@ -164,6 +174,8 @@ public sealed class MihoyoCommunitySignModule(
                         await ThrowIfStokenDeadAsync(account, result.Retcode, token);
                         if (result.Retcode == 1034)
                         {
+                            OhMyBot.Core.Infrastructure.ScheduledTasks.ManagedTaskExecutionContext.ReportFailure(
+                                $"米游社账号 {account.Id} 点赞帖子触发验证码，需要用户处理。");
                             captcha = true;
                             break;
                         }
@@ -171,6 +183,11 @@ public sealed class MihoyoCommunitySignModule(
                         if (result.Ok)
                         {
                             success++;
+                        }
+                        else
+                        {
+                            OhMyBot.Core.Infrastructure.ScheduledTasks.ManagedTaskExecutionContext.ReportFailure(
+                                $"米游社账号 {account.Id} 点赞帖子失败：{result.Message}");
                         }
 
                         await DelayAsync(2000, 4000, token);
@@ -214,6 +231,9 @@ public sealed class MihoyoCommunitySignModule(
                         var result = await client.SharePostAsync(credential.StokenCookie, deviceId, posts[0].PostId, token);
                         await ThrowIfStokenDeadAsync(account, result.Retcode, token);
                         lines.Add($"分享帖子：{(result.Ok ? "成功" : "失败：" + result.Message)}");
+                        if (!result.Ok)
+                            OhMyBot.Core.Infrastructure.ScheduledTasks.ManagedTaskExecutionContext.ReportFailure(
+                                $"米游社账号 {account.Id} 分享帖子失败：{result.Message}");
                     }
                 }
 

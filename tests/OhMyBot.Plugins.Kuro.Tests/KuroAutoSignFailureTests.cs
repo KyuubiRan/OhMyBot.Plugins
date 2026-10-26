@@ -23,7 +23,7 @@ public sealed class KuroAutoSignFailureTests
     public async Task GameHttpTimeoutNotificationPreservesCompletedCommunityTasks()
     {
         var publisher = new RecordingPublisher();
-        await RunAutoSignAsync(new GameFailureHandler(async cancellationToken =>
+        var status = await RunAutoSignAsync(new GameFailureHandler(async cancellationToken =>
         {
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             throw new AssertFailedException("The HTTP timeout should cancel the request.");
@@ -39,6 +39,9 @@ public sealed class KuroAutoSignFailureTests
         StringAssert.Matches(message, new System.Text.RegularExpressions.Regex(@"错误 id: [0-9a-f]{6}"));
         Assert.DoesNotContain("Operation canceled", message);
         Assert.DoesNotContain("自动签到执行失败：", message);
+        Assert.AreEqual(ManagedTaskOutcome.Failed, status.Outcome);
+        Assert.IsNotNull(status.LastErrorId);
+        Assert.Contains(nameof(SignInRetryExhaustedException), status.LastErrorDetails!);
     }
 
     [TestMethod]
@@ -61,7 +64,7 @@ public sealed class KuroAutoSignFailureTests
     {
         var publisher = new RecordingPublisher();
         var handler = new GameFailureHandler(_ => Task.FromResult(AlreadySigned()), failCommunity: true);
-        await RunAutoSignAsync(handler, publisher);
+        var status = await RunAutoSignAsync(handler, publisher);
 
         var message = publisher.Messages.Single();
         Assert.Contains("社区签到执行失败：接口请求失败", message);
@@ -73,6 +76,7 @@ public sealed class KuroAutoSignFailureTests
         Assert.Contains("时间：", message);
         Assert.DoesNotContain("private-value", message);
         Assert.DoesNotContain("社区签到结果：今日已签到", message);
+        Assert.AreEqual(ManagedTaskOutcome.Failed, status.Outcome);
     }
 
     [TestMethod]
@@ -85,7 +89,7 @@ public sealed class KuroAutoSignFailureTests
             if (++attempts < 4) throw new HttpRequestException("Temporary failure", null, HttpStatusCode.ServiceUnavailable);
             return Task.FromResult(AlreadySigned());
         });
-        await RunAutoSignAsync(handler, publisher);
+        var status = await RunAutoSignAsync(handler, publisher);
 
         Assert.AreEqual(4, attempts);
         Assert.AreEqual(1, handler.CommunityCalls);
@@ -93,6 +97,8 @@ public sealed class KuroAutoSignFailureTests
         Assert.Contains("社区签到结果：今日已签到", message);
         Assert.Contains("签到结果：今日已签到", message);
         Assert.DoesNotContain("执行失败", message);
+        Assert.AreEqual(ManagedTaskOutcome.Succeeded, status.Outcome);
+        Assert.AreEqual(0, status.FailureCount);
     }
 
     [TestMethod]
@@ -206,7 +212,7 @@ public sealed class KuroAutoSignFailureTests
         Assert.HasCount(0, publisher.Messages);
     }
 
-    private static async Task RunAutoSignAsync(
+    private static async Task<ManagedTaskStatus> RunAutoSignAsync(
         HttpMessageHandler handler,
         RecordingPublisher publisher,
         CancellationToken cancellationToken = default,
@@ -277,6 +283,7 @@ public sealed class KuroAutoSignFailureTests
             NullLogger<KuroAutoSignManagedTask>.Instance);
 
         await task.ExecuteAsync(cancellationToken);
+        return task.Status;
     }
 
     private sealed class GameFailureHandler(

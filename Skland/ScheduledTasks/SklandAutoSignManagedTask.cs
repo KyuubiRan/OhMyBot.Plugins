@@ -84,6 +84,7 @@ public sealed class SklandAutoSignManagedTask : ManagedTaskBase
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
+            ReportFailure(exception, $"森空岛账号 {account.Id}");
             _logger.LogWarning(exception, "Failed to process Skland account {AccountId}.", account.Id);
             var error = $"[森空岛-自动签到]\n账号：{account.DisplayName}\n自动签到执行失败：{SignInExecutor.DescribeFailure(exception)}";
             await PublishAsync(publisher, deliveries, error, cancellationToken);
